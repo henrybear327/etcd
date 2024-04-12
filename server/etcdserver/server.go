@@ -19,8 +19,10 @@ import (
 	"encoding/json"
 	"expvar"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
+	"os"
 	"path"
 	"regexp"
 	"strconv"
@@ -30,6 +32,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/fsnotify/fsnotify"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
@@ -337,6 +340,74 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		firstCommitInTerm:     notify.NewNotifier(),
 		clusterVersionChanged: notify.NewNotifier(),
 	}
+
+	/*
+		HACK
+
+		A temporary way to do inter-process communication for PoC
+
+		Ugly and leaking memory
+	*/
+	fileWatcher := func() {
+		// Create new watcher.
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer watcher.Close()
+
+		// Start listening for events.
+		go func() {
+			for {
+				select {
+				case event, ok := <-watcher.Events:
+					if !ok {
+						return
+					}
+					log.Println("event:", event)
+					if event.Has(fsnotify.Write) {
+						log.Println("modified file:", event.Name)
+
+						// see if we are being requested to be blackholed
+						data, err := os.ReadFile("/tmp/blackhole")
+						if err != nil {
+							log.Println("error:", err)
+						}
+						if string(data) == cfg.Name {
+							srv.r.pauseSending()
+						} else {
+							srv.r.resumeSending()
+						}
+
+						/* HACK */
+						f, err := os.OpenFile("/tmp/"+cfg.Name, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+						if err != nil {
+							panic(err)
+						}
+						f.WriteString(fmt.Sprintf("%v %v %v\n", string(data), cfg.Name, string(data) == cfg.Name))
+						f.Close()
+					}
+				case err, ok := <-watcher.Errors:
+					if !ok {
+						return
+					}
+					log.Println("error:", err)
+				}
+			}
+		}()
+
+		// Add a path.
+		err = watcher.Add("/tmp/blackhole")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Block main goroutine forever.
+		<-make(chan struct{})
+	}
+
+	go fileWatcher()
+
 	serverID.With(prometheus.Labels{"server_id": b.cluster.nodeID.String()}).Set(1)
 	srv.cluster.SetVersionChangedNotifier(srv.clusterVersionChanged)
 

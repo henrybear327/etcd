@@ -117,6 +117,15 @@
 		]
 	},
 	{
+		"project": "github.com/fsnotify/fsnotify",
+		"licenses": [
+			{
+				"type": "BSD 3-clause \"New\" or \"Revised\" License",
+				"confidence": 0.9711934156378601
+			}
+		]
+	},
+	{
 		"project": "github.com/go-logr/logr",
 		"licenses": [
 			{

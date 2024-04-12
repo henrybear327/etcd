@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -62,6 +63,13 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	// Mock partition
 	proxy := partitionedMember.PeerProxy()
 	t.Logf("Blackholing traffic from and to member %q", partitionedMember.Config().Name)
+	{
+		/* HACK */
+		err := os.WriteFile("/tmp/blackhole", []byte(partitionedMember.Config().Name), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	proxy.BlackholeTx()
 	proxy.BlackholeRx()
 
@@ -81,6 +89,13 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	// Wait for some time to restore the network
 	time.Sleep(1 * time.Second)
 	t.Logf("Unblackholing traffic from and to member %q", partitionedMember.Config().Name)
+	{
+		/* HACK */
+		err := os.WriteFile("/tmp/blackhole", []byte(""), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	proxy.UnblackholeTx()
 	proxy.UnblackholeRx()
 
