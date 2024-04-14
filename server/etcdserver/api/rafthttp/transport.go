@@ -130,6 +130,42 @@ type Transport struct {
 	streamProber   probing.Prober
 }
 
+type DemoStreamRoundTripper struct {
+	http.Transport
+}
+
+func (t *DemoStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	// if r.Body == nil {
+	// 	return nil, errors.New("nil body")
+	// }
+	// r.Body.Close()
+
+	// return &http.Response{
+	// 	StatusCode: 200,
+	// 	Body:       io.NopCloser(strings.NewReader("")),
+	// }, nil
+
+	return t.Transport.RoundTrip(r)
+}
+
+type DemoPipelineRoundTripper struct {
+	http.Transport
+}
+
+func (t *DemoPipelineRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	// if r.Body == nil {
+	// 	return nil, errors.New("nil body")
+	// }
+	// r.Body.Close()
+
+	// return &http.Response{
+	// 	StatusCode: 200,
+	// 	Body:       io.NopCloser(strings.NewReader("")),
+	// }, nil
+
+	return t.Transport.RoundTrip(r)
+}
+
 func (t *Transport) Start() error {
 	var err error
 	t.streamRt, err = newStreamRoundTripper(t.TLSInfo, t.DialTimeout)
