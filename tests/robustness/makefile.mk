@@ -40,7 +40,7 @@ GOFAIL_VERSION = $(shell cd tools/mod && go list -m -f {{.Version}} go.etcd.io/g
 
 .PHONY: gofail-enable
 gofail-enable: install-gofail
-	gofail enable server/etcdserver/ server/lease/leasehttp server/storage/backend/ server/storage/mvcc/ server/storage/wal/ server/etcdserver/api/v3rpc/
+	gofail enable server/etcdserver/ server/etcdserver/api/rafthttp server/lease/leasehttp server/storage/backend/ server/storage/mvcc/ server/storage/wal/ server/etcdserver/api/v3rpc/
 	cd ./server && go get go.etcd.io/gofail@${GOFAIL_VERSION}
 	cd ./etcdutl && go get go.etcd.io/gofail@${GOFAIL_VERSION}
 	cd ./etcdctl && go get go.etcd.io/gofail@${GOFAIL_VERSION}
@@ -48,7 +48,7 @@ gofail-enable: install-gofail
 
 .PHONY: gofail-disable
 gofail-disable: install-gofail
-	gofail disable server/etcdserver/ server/lease/leasehttp server/storage/backend/ server/storage/mvcc/ server/storage/wal/ server/etcdserver/api/v3rpc/
+	gofail disable server/etcdserver/ server/etcdserver/api/rafthttp server/lease/leasehttp server/storage/backend/ server/storage/mvcc/ server/storage/wal/ server/etcdserver/api/v3rpc/
 	cd ./server && go mod tidy
 	cd ./etcdutl && go mod tidy
 	cd ./etcdctl && go mod tidy

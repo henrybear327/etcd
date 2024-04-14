@@ -88,7 +88,7 @@ type Transporter interface {
 	Stop()
 }
 
-// Transport implements Transporter interface. It provides the functionality
+// Transport implements etcd's Transporter interface. It provides the functionality
 // to send raft messages to peers, and receive raft messages from peers.
 // User should call Handler method to get a handler to serve requests
 // received from peerURLs.
@@ -140,6 +140,16 @@ func (t *Transport) Start() error {
 	if err != nil {
 		return err
 	}
+
+	// make sure that the transport is copied over so we are using the right parameters for the connections
+	t.streamRt = &hijackedStreamRoundTripper{
+		Transport: *t.streamRt.(*http.Transport).Clone(),
+	}
+
+	t.pipelineRt = &hijackedPipelineRoundTripper{
+		Transport: *t.pipelineRt.(*http.Transport).Clone(),
+	}
+
 	t.remotes = make(map[types.ID]*remote)
 	t.peers = make(map[types.ID]Peer)
 	t.pipelineProber = probing.NewProber(t.pipelineRt)
