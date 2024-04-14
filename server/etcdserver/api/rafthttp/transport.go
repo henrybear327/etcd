@@ -16,7 +16,10 @@ package rafthttp
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,7 +91,7 @@ type Transporter interface {
 	Stop()
 }
 
-// Transport implements Transporter interface. It provides the functionality
+// Transport implements etcd's Transporter interface. It provides the functionality
 // to send raft messages to peers, and receive raft messages from peers.
 // User should call Handler method to get a handler to serve requests
 // received from peerURLs.
@@ -135,17 +138,17 @@ type DemoStreamRoundTripper struct {
 }
 
 func (t *DemoStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	// if r.Body == nil {
-	// 	return nil, errors.New("nil body")
-	// }
-	// r.Body.Close()
+	if r.Body == nil {
+		return nil, errors.New("nil body")
+	}
+	r.Body.Close()
 
-	// return &http.Response{
-	// 	StatusCode: 200,
-	// 	Body:       io.NopCloser(strings.NewReader("")),
-	// }, nil
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader("")),
+	}, nil
 
-	return t.Transport.RoundTrip(r)
+	// return t.Transport.RoundTrip(r)
 }
 
 type DemoPipelineRoundTripper struct {
@@ -176,6 +179,15 @@ func (t *Transport) Start() error {
 	if err != nil {
 		return err
 	}
+
+	t.streamRt = &DemoStreamRoundTripper{
+		Transport: *t.streamRt.(*http.Transport).Clone(),
+	}
+
+	t.pipelineRt = &DemoPipelineRoundTripper{
+		Transport: *t.pipelineRt.(*http.Transport).Clone(),
+	}
+
 	t.remotes = make(map[types.ID]*remote)
 	t.peers = make(map[types.ID]Peer)
 	t.pipelineProber = probing.NewProber(t.pipelineRt)
