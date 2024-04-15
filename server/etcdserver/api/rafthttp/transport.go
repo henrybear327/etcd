@@ -16,7 +16,6 @@ package rafthttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -135,21 +134,23 @@ type DemoStreamRoundTripper struct {
 	http.Transport
 }
 
+// dropRequest returns a response, by sending the request out with an empty body
+func dropRequest(t *http.Transport, r *http.Request) (*http.Response, error) {
+	r.Body = nil
+	return t.RoundTrip(r)
+}
+
 func (t *DemoStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.Body == nil {
-		return nil, errors.New("nil body")
-	}
 	// r.Body.Close()
 	// return &http.Response{
 	// 	StatusCode: 200,
 	// 	Body:       io.NopCloser(strings.NewReader("")),
 	// }, nil
-	
-	time.Sleep(5 * time.Second)
-	r.Body.Close()
-	return nil, http.ErrHandlerTimeout
 
-	// return t.Transport.RoundTrip(r)
+	// gofail: var DemoStreamRoundTripperFailPoint struct{}
+	// return dropRequest(&t.Transport, r)
+
+	return t.Transport.RoundTrip(r)
 }
 
 type DemoPipelineRoundTripper struct {
@@ -167,9 +168,8 @@ func (t *DemoPipelineRoundTripper) RoundTrip(r *http.Request) (*http.Response, e
 	// 	Body:       io.NopCloser(strings.NewReader("")),
 	// }, nil
 
-	// time.Sleep(5 * time.Second)
-	// r.Body.Close()
-	// return nil, http.ErrHandlerTimeout
+	// gofail: var DemoPipelineRoundTripperFailPoint struct{}
+	// return dropRequest(&t.Transport, r)
 
 	return t.Transport.RoundTrip(r)
 }
@@ -185,6 +185,7 @@ func (t *Transport) Start() error {
 		return err
 	}
 
+	// make sure that the transport is copied over so we are using the right parameters for the connections
 	t.streamRt = &DemoStreamRoundTripper{
 		Transport: *t.streamRt.(*http.Transport).Clone(),
 	}

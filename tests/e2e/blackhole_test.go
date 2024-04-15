@@ -27,6 +27,8 @@ import (
 
 	"go.etcd.io/etcd/tests/v3/framework/config"
 	"go.etcd.io/etcd/tests/v3/framework/e2e"
+
+	gofail "go.etcd.io/gofail/runtime"
 )
 
 func TestBlackholeByMockingPartitionLeader(t *testing.T) {
@@ -47,6 +49,7 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 		e2e.WithSnapshotCatchUpEntries(10),
 		e2e.WithIsPeerTLS(true),
 		e2e.WithPeerProxy(true),
+		// e2e.WithGoFailEnabled(true),
 	)
 	require.NoError(t, err, "failed to start etcd cluster: %v", err)
 	defer func() {
@@ -64,6 +67,14 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	t.Logf("Blackholing traffic from and to member %q", partitionedMember.Config().Name)
 	proxy.BlackholeTx()
 	proxy.BlackholeRx()
+
+	// enable failpoints
+	if err := gofail.Enable("DemoStreamRoundTripperFailPoint", "sleep(0)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := gofail.Enable("DemoPipelineRoundTripperFailPoint", "sleep(0)"); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Logf("Wait 5s for any open connections to expire")
 	time.Sleep(5 * time.Second)
@@ -83,6 +94,14 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	t.Logf("Unblackholing traffic from and to member %q", partitionedMember.Config().Name)
 	proxy.UnblackholeTx()
 	proxy.UnblackholeRx()
+
+	// disable failpoints
+	if err := gofail.Disable("DemoStreamRoundTripperFailPoint"); err != nil {
+		t.Fatal(err)
+	}
+	if err := gofail.Disable("DemoPipelineRoundTripperFailPoint"); err != nil {
+		t.Fatal(err)
+	}
 
 	leaderEPC = epc.Procs[epc.WaitLeader(t)]
 	time.Sleep(5 * time.Second)
