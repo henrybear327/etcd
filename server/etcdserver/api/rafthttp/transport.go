@@ -17,9 +17,7 @@ package rafthttp
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -141,12 +139,15 @@ func (t *DemoStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, err
 	if r.Body == nil {
 		return nil, errors.New("nil body")
 	}
+	// r.Body.Close()
+	// return &http.Response{
+	// 	StatusCode: 200,
+	// 	Body:       io.NopCloser(strings.NewReader("")),
+	// }, nil
+	
+	time.Sleep(5 * time.Second)
 	r.Body.Close()
-
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(strings.NewReader("")),
-	}, nil
+	return nil, http.ErrHandlerTimeout
 
 	// return t.Transport.RoundTrip(r)
 }
@@ -165,6 +166,10 @@ func (t *DemoPipelineRoundTripper) RoundTrip(r *http.Request) (*http.Response, e
 	// 	StatusCode: 200,
 	// 	Body:       io.NopCloser(strings.NewReader("")),
 	// }, nil
+
+	// time.Sleep(5 * time.Second)
+	// r.Body.Close()
+	// return nil, http.ErrHandlerTimeout
 
 	return t.Transport.RoundTrip(r)
 }
