@@ -34,6 +34,9 @@ func (h *hijackedReadCloser) Read(p []byte) (int, error) {
 }
 
 func (h *hijackedReadCloser) Close() error {
+	if h.originalReadCloser == nil {
+		return nil
+	}
 	return h.originalReadCloser.Close()
 }
 
