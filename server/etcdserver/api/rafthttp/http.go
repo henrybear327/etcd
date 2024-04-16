@@ -93,6 +93,8 @@ func newPipelineHandler(t *Transport, r Raft, cid types.ID) http.Handler {
 }
 
 func (h *pipelineHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	hijackRequestBody(r)
+
 	if r.Method != "POST" {
 		w.Header().Set("Allow", "POST")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -197,6 +199,8 @@ const unknownSnapshotSender = "UNKNOWN_SNAPSHOT_SENDER"
 // received and processed.
 // 2. this case should happen rarely, so no further optimization is done.
 func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	hijackRequestBody(r)
+
 	start := time.Now()
 
 	if r.Method != "POST" {
@@ -439,10 +443,13 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.(http.Flusher).Flush()
 
 	c := newCloseNotifier()
+	hijackedResponseWriter := &hijackedResponseWriter{
+		originalResponseWriter: w,
+	}
 	conn := &outgoingConn{
 		t:       t,
-		Writer:  w,
-		Flusher: w.(http.Flusher),
+		Writer:  hijackedResponseWriter,
+		Flusher: hijackedResponseWriter,
 		Closer:  c,
 		localID: h.tr.ID,
 		peerID:  from,

@@ -130,53 +130,6 @@ type Transport struct {
 	streamProber   probing.Prober
 }
 
-type DemoStreamRoundTripper struct {
-	http.Transport
-}
-
-// dropRequest returns a response, by sending the request out with an empty body
-func dropRequest(t *http.Transport, r *http.Request) (*http.Response, error) {
-	r.Body = nil
-	return t.RoundTrip(r)
-}
-
-func (t *DemoStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	// // we start blocking the traffic since the beginning
-	// if r.Body != nil {
-	// 	r.Body.Close()
-	// }
-	// return &http.Response{
-	// 	StatusCode: 200,
-	// 	Body:       io.NopCloser(strings.NewReader("")),
-	// }, nil
-
-	// gofail: var DemoStreamRoundTripperFailPoint struct{}
-	// return dropRequest(&t.Transport, r)
-
-	return t.Transport.RoundTrip(r)
-}
-
-type DemoPipelineRoundTripper struct {
-	http.Transport
-}
-
-func (t *DemoPipelineRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	// if r.Body == nil {
-	// 	return nil, errors.New("nil body")
-	// }
-	// r.Body.Close()
-
-	// return &http.Response{
-	// 	StatusCode: 200,
-	// 	Body:       io.NopCloser(strings.NewReader("")),
-	// }, nil
-
-	// gofail: var DemoPipelineRoundTripperFailPoint struct{}
-	// return dropRequest(&t.Transport, r)
-
-	return t.Transport.RoundTrip(r)
-}
-
 func (t *Transport) Start() error {
 	var err error
 	t.streamRt, err = newStreamRoundTripper(t.TLSInfo, t.DialTimeout)
@@ -189,11 +142,11 @@ func (t *Transport) Start() error {
 	}
 
 	// make sure that the transport is copied over so we are using the right parameters for the connections
-	t.streamRt = &DemoStreamRoundTripper{
+	t.streamRt = &hijackedStreamRoundTripper{
 		Transport: *t.streamRt.(*http.Transport).Clone(),
 	}
 
-	t.pipelineRt = &DemoPipelineRoundTripper{
+	t.pipelineRt = &hijackedPipelineRoundTripper{
 		Transport: *t.pipelineRt.(*http.Transport).Clone(),
 	}
 
