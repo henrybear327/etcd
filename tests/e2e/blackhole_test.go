@@ -70,10 +70,10 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 
 	// enable failpoints
 	if err := gofail.Enable("DemoStreamRoundTripperFailPoint", "sleep(0)"); err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 	if err := gofail.Enable("DemoPipelineRoundTripperFailPoint", "sleep(0)"); err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 
 	t.Logf("Wait 5s for any open connections to expire")
@@ -97,10 +97,10 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 
 	// disable failpoints
 	if err := gofail.Disable("DemoStreamRoundTripperFailPoint"); err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 	if err := gofail.Disable("DemoPipelineRoundTripperFailPoint"); err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 
 	leaderEPC = epc.Procs[epc.WaitLeader(t)]

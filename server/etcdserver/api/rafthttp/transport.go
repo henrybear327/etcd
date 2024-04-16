@@ -16,7 +16,9 @@ package rafthttp
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -141,11 +143,14 @@ func dropRequest(t *http.Transport, r *http.Request) (*http.Response, error) {
 }
 
 func (t *DemoStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	// r.Body.Close()
-	// return &http.Response{
-	// 	StatusCode: 200,
-	// 	Body:       io.NopCloser(strings.NewReader("")),
-	// }, nil
+	// we start blocking the traffic since the beginning
+	if r.Body != nil {
+		r.Body.Close()
+	}
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader("")),
+	}, nil
 
 	// gofail: var DemoStreamRoundTripperFailPoint struct{}
 	// return dropRequest(&t.Transport, r)
