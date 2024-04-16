@@ -47,8 +47,8 @@ func hijackRequestBody(r *http.Request) {
 func discardReadData(rc io.ReadCloser, p []byte) (int, error) {
 	// return rc.Read(make([]byte, len(p)))
 
-	// _, err := rc.Read(make([]byte, len(p)))
-	// return 0, err // discard data but return original error
+	_, err := rc.Read(make([]byte, len(p)))
+	return 0, err // discard data but return original error
 
-	return 0, nil
+	// return 0, nil
 }
