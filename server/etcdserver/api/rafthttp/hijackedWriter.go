@@ -28,7 +28,7 @@ func (h *hijackedResponseWriter) Header() http.Header {
 
 func (h *hijackedResponseWriter) Write(p []byte) (int, error) {
 	// gofail: var DemoStreamHandlerWriterFailPoint struct{}
-	// return 0, nil
+	// return discardWriteData(p)
 
 	if h.originalResponseWriter == nil {
 		return 0, nil
@@ -44,9 +44,13 @@ func (h *hijackedResponseWriter) Flush() {
 	h.originalResponseWriter.(http.Flusher).Flush()
 }
 
-// /* helper functions */
-// func hijackResponseWriter(w *http.ResponseWriter) {
-// 	w = &hijackedResponseWriter{
-// 		originalResponseWriter: w,
-// 	}
-// }
+/* helper functions */
+func hijackResponseWriter(w http.ResponseWriter) *hijackedResponseWriter {
+	return &hijackedResponseWriter{
+		originalResponseWriter: w,
+	}
+}
+
+func discardWriteData(p []byte) (int, error) {
+	return 0, nil
+}

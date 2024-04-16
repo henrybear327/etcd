@@ -65,10 +65,10 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	t.Logf("Blackholing traffic from and to member %q", partitionedMember.Config().Name)
 	proxy.BlackholeTx()
 	proxy.BlackholeRx()
-	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "DemoDropRequestBodyFailPoint", `sleep("0s")`); err != nil {
+	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "DemoDropRequestBodyFailPoint", `sleep("0.1s")`); err != nil {
 		t.Fatal(err)
 	}
-	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "DemoStreamHandlerWriterFailPoint", `sleep("0s")`); err != nil {
+	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "DemoStreamHandlerWriterFailPoint", `sleep("0.1s)`); err != nil {
 		t.Fatal(err)
 	}
 

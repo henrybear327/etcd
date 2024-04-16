@@ -25,7 +25,7 @@ type hijackedReadCloser struct {
 
 func (h *hijackedReadCloser) Read(p []byte) (int, error) {
 	// gofail: var DemoDropRequestBodyFailPoint struct{}
-	// return discardData(h.originalReadCloser, p)
+	// return discardReadData(h.originalReadCloser, p)
 
 	if h.originalReadCloser == nil {
 		return 0, nil
@@ -44,8 +44,11 @@ func hijackRequestBody(r *http.Request) {
 	}
 }
 
-func discardData(rc io.ReadCloser, p []byte) (int, error) {
+func discardReadData(rc io.ReadCloser, p []byte) (int, error) {
 	// return rc.Read(make([]byte, len(p)))
-	_, err := rc.Read(make([]byte, len(p)))
-	return 0, err // discard data but return original error
+
+	// _, err := rc.Read(make([]byte, len(p)))
+	// return 0, err // discard data but return original error
+
+	return 0, nil
 }
