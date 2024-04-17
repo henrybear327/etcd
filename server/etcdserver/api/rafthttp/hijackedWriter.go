@@ -27,7 +27,8 @@ func (h *hijackedResponseWriter) Header() http.Header {
 }
 
 func (h *hijackedResponseWriter) Write(p []byte) (int, error) {
-	// gofail: var DemoStreamHandlerWriterFailPoint struct{}
+	// When hijacking, we drop the data to be written completely
+	// gofail: var HijackResponseWriterFailPoint struct{}
 	// return discardWriteData(p)
 
 	if h.originalResponseWriter == nil {

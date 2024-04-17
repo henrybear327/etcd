@@ -142,13 +142,13 @@ func (t *Transport) Start() error {
 	}
 
 	// make sure that the transport is copied over so we are using the right parameters for the connections
-	t.streamRt = &hijackedStreamRoundTripper{
-		Transport: *t.streamRt.(*http.Transport).Clone(),
-	}
-
-	t.pipelineRt = &hijackedPipelineRoundTripper{
-		Transport: *t.pipelineRt.(*http.Transport).Clone(),
-	}
+	// gofail: var HijackRoundTripperFailPoint struct{}
+	// t.pipelineRt = &hijackedPipelineRoundTripper{
+	// 	Transport: *t.pipelineRt.(*http.Transport).Clone(),
+	// }
+	// t.streamRt = &hijackedStreamRoundTripper{
+	// 	Transport: *t.streamRt.(*http.Transport).Clone(),
+	// }
 
 	t.remotes = make(map[types.ID]*remote)
 	t.peers = make(map[types.ID]Peer)
