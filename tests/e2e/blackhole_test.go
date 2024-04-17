@@ -75,6 +75,9 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "HijackResponseWriterFailPoint", `sleep("5ms")`); err != nil {
 		t.Fatal(err)
 	}
+	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "HijackResponseWriterHeaderFailPoint", `sleep("5ms")`); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Logf("Wait 5s for any open connections to expire")
 	time.Sleep(5 * time.Second)
@@ -98,6 +101,9 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 		t.Fatal(err)
 	}
 	if err := partitionedMember.Failpoints().DeactivateHTTP(context.Background(), "HijackResponseWriterFailPoint"); err != nil {
+		t.Fatal(err)
+	}
+	if err := partitionedMember.Failpoints().DeactivateHTTP(context.Background(), "HijackResponseWriterHeaderFailPoint"); err != nil {
 		t.Fatal(err)
 	}
 
