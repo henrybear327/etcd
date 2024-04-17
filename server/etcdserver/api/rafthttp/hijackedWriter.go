@@ -38,6 +38,13 @@ func (h *hijackedResponseWriter) Write(p []byte) (int, error) {
 }
 
 func (h *hijackedResponseWriter) WriteHeader(statusCode int) {
+	// When hijacking, we drop the data to be written completely
+	// gofail: var HijackResponseWriterHeaderFailPoint struct{}
+	// return
+
+	if h.originalResponseWriter == nil {
+		return
+	}
 	h.originalResponseWriter.WriteHeader(statusCode)
 }
 
