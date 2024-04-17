@@ -48,6 +48,9 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 		e2e.WithIsPeerTLS(true),
 		e2e.WithPeerProxy(true),
 		e2e.WithGoFailEnabled(true),
+		e2e.WithEnvVars(map[string]string{
+			"GOFAIL_FAILPOINTS": `HijackRoundTripperFailPoint=sleep("5ms");HijackSnapshotHandlerFailPoint=sleep("5ms");HijackPipelineHandlerFailPoint=sleep("5ms");HijackStreamHandlerFailPoint=sleep("5ms")`,
+		}),
 	)
 	require.NoError(t, err, "failed to start etcd cluster: %v", err)
 	defer func() {
@@ -60,15 +63,16 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 		mockPartitionNodeIndex = (leaderId + 1) % (clusterSize)
 	}
 	partitionedMember := epc.Procs[mockPartitionNodeIndex]
+
 	// Mock partition
 	proxy := partitionedMember.PeerProxy()
 	t.Logf("Blackholing traffic from and to member %q", partitionedMember.Config().Name)
 	proxy.BlackholeTx()
 	proxy.BlackholeRx()
-	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "DemoDropRequestBodyFailPoint", `sleep("0.05s")`); err != nil {
+	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "HijackRequestBodyFailPoint", `sleep("5ms")`); err != nil {
 		t.Fatal(err)
 	}
-	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "DemoStreamHandlerWriterFailPoint", `sleep("0.05s)`); err != nil {
+	if err := partitionedMember.Failpoints().SetupHTTP(context.Background(), "HijackResponseWriterFailPoint", `sleep("5ms")`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,10 +94,10 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 	t.Logf("Unblackholing traffic from and to member %q", partitionedMember.Config().Name)
 	proxy.UnblackholeTx()
 	proxy.UnblackholeRx()
-	if err := partitionedMember.Failpoints().DeactivateHTTP(context.Background(), "DemoDropRequestBodyFailPoint"); err != nil {
+	if err := partitionedMember.Failpoints().DeactivateHTTP(context.Background(), "HijackRequestBodyFailPoint"); err != nil {
 		t.Fatal(err)
 	}
-	if err := partitionedMember.Failpoints().DeactivateHTTP(context.Background(), "DemoStreamHandlerWriterFailPoint"); err != nil {
+	if err := partitionedMember.Failpoints().DeactivateHTTP(context.Background(), "HijackResponseWriterFailPoint"); err != nil {
 		t.Fatal(err)
 	}
 

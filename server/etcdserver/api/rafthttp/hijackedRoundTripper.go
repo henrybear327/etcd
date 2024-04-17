@@ -28,7 +28,6 @@ func (t *hijackedStreamRoundTripper) RoundTrip(r *http.Request) (*http.Response,
 }
 
 /* for pipeline */
-
 type hijackedPipelineRoundTripper struct {
 	http.Transport
 }
