@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.etcd.io/etcd/client/pkg/v3/transport"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/pkg/v3/proxy"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -508,6 +509,16 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 			Logger: zap.NewNop(),
 			To:     peerListenURL,
 			From:   peerAdvertiseURL,
+			TLSInfo: transport.TLSInfo{
+				CertFile:      CertPath,
+				KeyFile:       PrivateKeyPath,
+				TrustedCAFile: CaPath,
+			},
+			TerminatingTLSInfo: transport.TLSInfo{
+				CertFile:      CertPath,
+				KeyFile:       PrivateKeyPath,
+				TrustedCAFile: CaPath,
+			},
 		}
 	}
 

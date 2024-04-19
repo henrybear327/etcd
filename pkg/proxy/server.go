@@ -15,6 +15,8 @@
 package proxy
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -22,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -130,13 +133,14 @@ type Server interface {
 
 // ServerConfig defines proxy server configuration.
 type ServerConfig struct {
-	Logger        *zap.Logger
-	From          url.URL
-	To            url.URL
-	TLSInfo       transport.TLSInfo
-	DialTimeout   time.Duration
-	BufferSize    int
-	RetryInterval time.Duration
+	Logger             *zap.Logger
+	From               url.URL
+	To                 url.URL
+	TLSInfo            transport.TLSInfo
+	TerminatingTLSInfo transport.TLSInfo
+	DialTimeout        time.Duration
+	BufferSize         int
+	RetryInterval      time.Duration
 }
 
 type server struct {
@@ -147,8 +151,9 @@ type server struct {
 	to       url.URL
 	toPort   int
 
-	tlsInfo     transport.TLSInfo
-	dialTimeout time.Duration
+	tlsInfo            transport.TLSInfo
+	terminatingTLSInfo transport.TLSInfo
+	dialTimeout        time.Duration
 
 	bufferSize    int
 	retryInterval time.Duration
@@ -197,8 +202,9 @@ func NewServer(cfg ServerConfig) Server {
 		from: cfg.From,
 		to:   cfg.To,
 
-		tlsInfo:     cfg.TLSInfo,
-		dialTimeout: cfg.DialTimeout,
+		tlsInfo:            cfg.TLSInfo,
+		terminatingTLSInfo: cfg.TerminatingTLSInfo,
+		dialTimeout:        cfg.DialTimeout,
 
 		bufferSize:    cfg.BufferSize,
 		retryInterval: cfg.RetryInterval,
@@ -249,7 +255,10 @@ func NewServer(cfg ServerConfig) Server {
 	}
 
 	var ln net.Listener
-	if !s.tlsInfo.Empty() {
+	if !s.terminatingTLSInfo.Empty() {
+		// let's check if we should terminate the https request first
+		ln, err = transport.NewListener(addr, "https", &s.terminatingTLSInfo)
+	} else if !s.tlsInfo.Empty() {
 		ln, err = transport.NewListener(addr, s.from.Scheme, &s.tlsInfo)
 	} else {
 		ln, err = net.Listen(s.from.Scheme, addr)
@@ -454,6 +463,27 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 			return
 		}
 		data := buf[:nr1]
+
+		// attempt to obtain the header information
+		// this approach won't work since we are looking at encrypted bytestream, and headers are also encrypted
+		// unless we are able to decrypt this
+		f, err := os.OpenFile("/tmp/header.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+
+		if req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(data))); err != nil {
+			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] ReadRequest failed %v (%v)\n", string(data), err)); err != nil {
+				panic(err)
+			}
+		} else {
+			peerURLs := req.Header.Get("X-PeerURLs")
+
+			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] X-PeerURLs %v\n", peerURLs)); err != nil {
+				panic(err)
+			}
+		}
+		f.Close()
 
 		// alters/corrupts/drops data
 		switch ptype {
