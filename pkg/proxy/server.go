@@ -1058,7 +1058,11 @@ func (s *server) ResetListener() error {
 	var ln net.Listener
 	var err error
 	if !s.tlsInfo.Empty() {
-		ln, err = transport.NewListener(s.from.Host, s.from.Scheme, &s.tlsInfo)
+		if s.isSSLTerminatingProxy {
+			ln, err = transport.NewListener(s.from.Host, "https", &s.tlsInfo)
+		} else {
+			ln, err = transport.NewListener(s.from.Host, s.from.Scheme, &s.tlsInfo)
+		}
 	} else {
 		ln, err = net.Listen(s.from.Scheme, s.from.Host)
 	}
