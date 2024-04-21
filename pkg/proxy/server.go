@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	mrand "math/rand"
@@ -133,18 +134,23 @@ type Server interface {
 
 // ServerConfig defines proxy server configuration.
 type ServerConfig struct {
-	Logger             *zap.Logger
-	From               url.URL
-	To                 url.URL
-	TLSInfo            transport.TLSInfo
-	TerminatingTLSInfo transport.TLSInfo
-	DialTimeout        time.Duration
-	BufferSize         int
-	RetryInterval      time.Duration
+	Logger                *zap.Logger
+	From                  url.URL
+	To                    url.URL
+	TLSInfo               transport.TLSInfo
+	TerminatingTLSInfo    transport.TLSInfo
+	DialTimeout           time.Duration
+	BufferSize            int
+	RetryInterval         time.Duration
+	IsSSLTerminatingProxy bool
+	BlackholeChannel      chan string
 }
 
 type server struct {
 	lg *zap.Logger
+
+	isSSLTerminatingProxy bool
+	blackholeChannel      chan string
 
 	from     url.URL
 	fromPort int
@@ -199,6 +205,9 @@ func NewServer(cfg ServerConfig) Server {
 	s := &server{
 		lg: cfg.Logger,
 
+		isSSLTerminatingProxy: cfg.IsSSLTerminatingProxy,
+		blackholeChannel:      cfg.BlackholeChannel,
+
 		from: cfg.From,
 		to:   cfg.To,
 
@@ -222,6 +231,7 @@ func NewServer(cfg ServerConfig) Server {
 	if err == nil {
 		s.fromPort, _ = strconv.Atoi(fromPort)
 	}
+
 	var toPort string
 	_, toPort, err = net.SplitHostPort(cfg.To.Host)
 	if err == nil {
@@ -255,11 +265,12 @@ func NewServer(cfg ServerConfig) Server {
 	}
 
 	var ln net.Listener
-	if !s.terminatingTLSInfo.Empty() {
-		// let's check if we should terminate the https request first
-		ln, err = transport.NewListener(addr, "https", &s.terminatingTLSInfo)
-	} else if !s.tlsInfo.Empty() {
-		ln, err = transport.NewListener(addr, s.from.Scheme, &s.tlsInfo)
+	if !s.tlsInfo.Empty() {
+		if s.isSSLTerminatingProxy {
+			ln, err = transport.NewListener(addr, "https", &s.tlsInfo)
+		} else {
+			ln, err = transport.NewListener(addr, s.from.Scheme, &s.tlsInfo)
+		}
 	} else {
 		ln, err = net.Listen(s.from.Scheme, addr)
 	}
@@ -364,22 +375,37 @@ func (s *server) listenAndServe() {
 
 		var out net.Conn
 		if !s.tlsInfo.Empty() {
-			var tp *http.Transport
-			tp, err = transport.NewTransport(s.tlsInfo, s.dialTimeout)
+			// var tp *http.Transport
+			// tp, err = transport.NewTransport(s.tlsInfo, s.dialTimeout)
+			// if err != nil {
+			// 	select {
+			// 	case s.errc <- err:
+			// 		select {
+			// 		case <-s.donec:
+			// 			return
+			// 		default:
+			// 		}
+			// 	case <-s.donec:
+			// 		return
+			// 	}
+			// 	continue
+			// }
+			// out, err = tp.DialContext(ctx, s.to.Scheme, s.to.Host)
+
+			ctx.Err()
+			var cert tls.Certificate
+			cert, err = tls.LoadX509KeyPair("/Users/taatsch9/go/src/etcd/tests/fixtures/server.crt", "/Users/taatsch9/go/src/etcd/tests/fixtures/server.key.insecure")
 			if err != nil {
-				select {
-				case s.errc <- err:
-					select {
-					case <-s.donec:
-						return
-					default:
-					}
-				case <-s.donec:
-					return
-				}
-				continue
+				panic("")
 			}
-			out, err = tp.DialContext(ctx, s.to.Scheme, s.to.Host)
+			conf := &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       []tls.Certificate{cert},
+			}
+			out, err = tls.Dial(s.to.Scheme, s.to.Host, conf)
+			// if err != nil {
+			// 	panic("")
+			// }
 		} else {
 			out, err = net.Dial(s.to.Scheme, s.to.Host)
 		}
@@ -398,13 +424,18 @@ func (s *server) listenAndServe() {
 			continue
 		}
 
+		// if s.isSSLTerminatingProxy {
+		// 	// TODO
+		// } else {
 		s.closeWg.Add(2)
 		go func() {
 			defer s.closeWg.Done()
 			// read incoming bytes from listener, dispatch to outgoing connection
+
 			s.transmit(out, in)
 			out.Close()
 			in.Close()
+
 		}()
 		go func() {
 			defer s.closeWg.Done()
@@ -413,6 +444,7 @@ func (s *server) listenAndServe() {
 			in.Close()
 			out.Close()
 		}()
+		// }
 	}
 }
 
@@ -467,19 +499,43 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 		// attempt to obtain the header information
 		// this approach won't work since we are looking at encrypted bytestream, and headers are also encrypted
 		// unless we are able to decrypt this
-		f, err := os.OpenFile("/tmp/header.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil {
-			panic(err)
-		}
-
-		if req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(data))); err != nil {
-			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] ReadRequest failed %v (%v)\n", string(data), err)); err != nil {
+		var f *os.File
+		if s.isSSLTerminatingProxy {
+			f, err = os.OpenFile("/tmp/terminating_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
 				panic(err)
 			}
 		} else {
-			peerURLs := req.Header.Get("X-PeerURLs")
+			f, err = os.OpenFile("/tmp/transparent_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				panic(err)
+			}
+		}
 
-			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] X-PeerURLs %v\n", peerURLs)); err != nil {
+		if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v from scheme: %v to scheme: %v\n", ptype, s.from.Scheme, s.to.Scheme)); err != nil {
+			panic(err)
+		}
+
+		if ptype == proxyTx {
+			/*
+				if we are isolating A
+				- the incoming traffic from other nodes to A will be blocked by the transparent proxy already
+				- the outgoing traffic from A to other nodes will have to be inspected at all SSL termination proxy.
+				  From TX we can read the header and use BlackholeChannel to instruct the transparent proxy to block
+				  the traffic coming from specific connections when looking at the peerURL field
+			*/
+			if req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(data))); err != nil {
+				if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] ReadRequest failed %v (%v)\n", string(data), err)); err != nil {
+					panic(err)
+				}
+			} else {
+				peerURLs := req.Header.Get("X-PeerURLs")
+
+				if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v X-PeerURLs %v\n", ptype, peerURLs)); err != nil {
+					panic(err)
+				}
+			}
+			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v data %v\n", ptype, string(data))); err != nil {
 				panic(err)
 			}
 		}

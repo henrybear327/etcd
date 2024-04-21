@@ -69,12 +69,13 @@ type LogsExpect interface {
 }
 
 type EtcdServerProcess struct {
-	cfg        *EtcdServerProcessConfig
-	proc       *expect.ExpectProcess
-	proxy      proxy.Server
-	lazyfs     *LazyFS
-	failpoints *BinaryFailpoints
-	donec      chan struct{} // closed when Interact() terminates
+	cfg                 *EtcdServerProcessConfig
+	proc                *expect.ExpectProcess
+	proxy               proxy.Server
+	SSLTerminationProxy proxy.Server
+	lazyfs              *LazyFS
+	failpoints          *BinaryFailpoints
+	donec               chan struct{} // closed when Interact() terminates
 }
 
 type EtcdServerProcessConfig struct {
@@ -100,8 +101,9 @@ type EtcdServerProcessConfig struct {
 	GoFailPort          int
 	GoFailClientTimeout time.Duration
 
-	LazyFSEnabled bool
-	Proxy         *proxy.ServerConfig
+	LazyFSEnabled       bool
+	Proxy               *proxy.ServerConfig
+	SSLTerminationProxy *proxy.ServerConfig
 }
 
 func NewEtcdServerProcess(t testing.TB, cfg *EtcdServerProcessConfig) (*EtcdServerProcess, error) {
@@ -150,6 +152,15 @@ func (ep *EtcdServerProcess) Start(ctx context.Context) error {
 	ep.donec = make(chan struct{})
 	if ep.proc != nil {
 		panic("already started")
+	}
+	if ep.cfg.SSLTerminationProxy != nil && ep.SSLTerminationProxy == nil {
+		ep.cfg.lg.Info("starting SSL termination proxy...", zap.String("name", ep.cfg.Name), zap.String("from", ep.cfg.SSLTerminationProxy.From.String()), zap.String("to", ep.cfg.SSLTerminationProxy.To.String()))
+		ep.SSLTerminationProxy = proxy.NewServer(*ep.cfg.SSLTerminationProxy)
+		select {
+		case <-ep.SSLTerminationProxy.Ready():
+		case err := <-ep.SSLTerminationProxy.Error():
+			return err
+		}
 	}
 	if ep.cfg.Proxy != nil && ep.proxy == nil {
 		ep.cfg.lg.Info("starting proxy...", zap.String("name", ep.cfg.Name), zap.String("from", ep.cfg.Proxy.From.String()), zap.String("to", ep.cfg.Proxy.To.String()))
@@ -225,6 +236,14 @@ func (ep *EtcdServerProcess) Stop() (err error) {
 		ep.cfg.lg.Info("stopping proxy...", zap.String("name", ep.cfg.Name))
 		err = ep.proxy.Close()
 		ep.proxy = nil
+		if err != nil {
+			return err
+		}
+	}
+	if ep.SSLTerminationProxy != nil {
+		ep.cfg.lg.Info("stopping SSL termination proxy...", zap.String("name", ep.cfg.Name))
+		err = ep.SSLTerminationProxy.Close()
+		ep.SSLTerminationProxy = nil
 		if err != nil {
 			return err
 		}

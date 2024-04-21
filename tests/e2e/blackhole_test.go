@@ -43,6 +43,7 @@ func blackholeTestByMockingPartition(t *testing.T, clusterSize int, partitionLea
 		e2e.WithClusterSize(clusterSize),
 		e2e.WithSnapshotCount(10),
 		e2e.WithSnapshotCatchUpEntries(10),
+		e2e.WithSSLTerminationProxy(true),
 		e2e.WithIsPeerTLS(true),
 		e2e.WithPeerProxy(true),
 	)
