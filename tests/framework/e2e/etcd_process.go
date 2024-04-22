@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -212,6 +213,48 @@ func (ep *EtcdServerProcess) Stop() (err error) {
 
 	ep.cfg.lg.Info("stopping server...", zap.String("name", ep.cfg.Name))
 
+	var wg sync.WaitGroup
+
+	if ep.SSLTerminationProxy != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ep.cfg.lg.Info("stopping SSL termination proxy...", zap.String("name", ep.cfg.Name))
+			err = ep.SSLTerminationProxy.Close()
+			ep.SSLTerminationProxy = nil
+			if err != nil {
+				return
+				// return err // FIXME
+			}
+		}()
+	}
+	if ep.proxy != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ep.cfg.lg.Info("stopping proxy...", zap.String("name", ep.cfg.Name))
+			err = ep.proxy.Close()
+			ep.proxy = nil
+			if err != nil {
+				return
+				// return err // FIXME
+			}
+		}()
+	}
+	if ep.lazyfs != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ep.cfg.lg.Info("stopping lazyfs...", zap.String("name", ep.cfg.Name))
+			err = ep.lazyfs.Stop()
+			ep.lazyfs = nil
+			if err != nil {
+				return
+				// return err // FIXME
+			}
+		}()
+	}
+
 	defer func() {
 		ep.proc = nil
 	}()
@@ -233,30 +276,9 @@ func (ep *EtcdServerProcess) Stop() (err error) {
 		}
 	}
 	ep.cfg.lg.Info("stopped server.", zap.String("name", ep.cfg.Name))
-	if ep.proxy != nil {
-		ep.cfg.lg.Info("stopping proxy...", zap.String("name", ep.cfg.Name))
-		err = ep.proxy.Close()
-		ep.proxy = nil
-		if err != nil {
-			return err
-		}
-	}
-	if ep.SSLTerminationProxy != nil {
-		ep.cfg.lg.Info("stopping SSL termination proxy...", zap.String("name", ep.cfg.Name))
-		err = ep.SSLTerminationProxy.Close()
-		ep.SSLTerminationProxy = nil
-		if err != nil {
-			return err
-		}
-	}
-	if ep.lazyfs != nil {
-		ep.cfg.lg.Info("stopping lazyfs...", zap.String("name", ep.cfg.Name))
-		err = ep.lazyfs.Stop()
-		ep.lazyfs = nil
-		if err != nil {
-			return err
-		}
-	}
+
+	wg.Wait()
+
 	return nil
 }
 
