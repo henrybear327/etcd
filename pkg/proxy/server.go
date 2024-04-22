@@ -590,11 +590,13 @@ func (s *server) ioCopy(dst, src net.Conn, ptype proxyType) {
 		default:
 			panic("unknown proxy type")
 		}
-		// gofail: var blackholePeerURLs string
+		// gofail: var BlackholePeerURLsFailPoint struct{}
+
+		// var BlackholePeerURLsFailPoint string
 		// if !s.isSSLTerminatingProxy {
 		// 	s.connectionMapMu.RLock()
 		// 	if peerURLs, ok := s.connectionMap[src.RemoteAddr().String()]; ok {
-		// 		if strings.Contains(peerURLs, blackholePeerURLs) {
+		// 		if strings.Contains(peerURLs, BlackholePeerURLsFailPoint) {
 		// 			data = nil
 		// 		}
 		// 	} else {

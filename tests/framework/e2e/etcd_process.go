@@ -417,7 +417,11 @@ func (f *BinaryFailpoints) SetupHTTP(ctx context.Context, failpoint, payload str
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("bad status code: %d", resp.StatusCode)
+		errorBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("bad status code: %d (%#v)", resp.StatusCode, string(errorBody))
 	}
 	return nil
 }
