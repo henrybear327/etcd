@@ -143,14 +143,16 @@ type ServerConfig struct {
 	BufferSize            int
 	RetryInterval         time.Duration
 	IsSSLTerminatingProxy bool
-	BlackholeChannel      chan string
+	ConnectionMap         map[string]string
+	ConnectionMapMu       *sync.RWMutex
 }
 
 type server struct {
 	lg *zap.Logger
 
 	isSSLTerminatingProxy bool
-	blackholeChannel      chan string
+	connectionMap         map[string]string
+	connectionMapMu       *sync.RWMutex
 
 	from     url.URL
 	fromPort int
@@ -206,7 +208,8 @@ func NewServer(cfg ServerConfig) Server {
 		lg: cfg.Logger,
 
 		isSSLTerminatingProxy: cfg.IsSSLTerminatingProxy,
-		blackholeChannel:      cfg.BlackholeChannel,
+		connectionMap:         cfg.ConnectionMap,
+		connectionMapMu:       cfg.ConnectionMapMu,
 
 		from: cfg.From,
 		to:   cfg.To,
@@ -443,9 +446,6 @@ func (s *server) listenAndServe() {
 		f.Sync()
 		f.Close()
 
-		// if s.isSSLTerminatingProxy {
-		// 	// TODO
-		// } else {
 		s.closeWg.Add(2)
 		go func() {
 			defer s.closeWg.Done()
@@ -454,6 +454,13 @@ func (s *server) listenAndServe() {
 			s.transmit(out, in)
 			out.Close()
 			in.Close()
+
+			if s.isSSLTerminatingProxy {
+				// when the connection is closed, we delete the entry from the map
+				s.connectionMapMu.Lock()
+				delete(s.connectionMap, out.LocalAddr().String())
+				s.connectionMapMu.Unlock()
+			}
 		}()
 		go func() {
 			defer s.closeWg.Done()
@@ -461,16 +468,22 @@ func (s *server) listenAndServe() {
 			s.receive(in, out)
 			in.Close()
 			out.Close()
+
+			if s.isSSLTerminatingProxy {
+				// when the connection is closed, we delete the entry from the map
+				s.connectionMapMu.Lock()
+				delete(s.connectionMap, out.LocalAddr().String())
+				s.connectionMapMu.Unlock()
+			}
 		}()
-		// }
 	}
 }
 
-func (s *server) transmit(dst io.Writer, src io.Reader) {
+func (s *server) transmit(dst, src net.Conn) {
 	s.ioCopy(dst, src, proxyTx)
 }
 
-func (s *server) receive(dst io.Writer, src io.Reader) {
+func (s *server) receive(dst, src net.Conn) {
 	s.ioCopy(dst, src, proxyRx)
 }
 
@@ -481,7 +494,7 @@ const (
 	proxyRx
 )
 
-func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
+func (s *server) ioCopy(dst, src net.Conn, ptype proxyType) {
 	buf := make([]byte, s.bufferSize)
 	for {
 		nr1, err := src.Read(buf)
@@ -548,6 +561,10 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 				if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v X-PeerURLs %v\n", ptype, peerURLs)); err != nil {
 					panic(err)
 				}
+
+				s.connectionMapMu.Lock()
+				s.connectionMap[dst.LocalAddr().String()] = peerURLs
+				s.connectionMapMu.Unlock()
 			}
 			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v data %v\n", ptype, string(data))); err != nil {
 				panic(err)
@@ -573,6 +590,18 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 		default:
 			panic("unknown proxy type")
 		}
+		// gofail: var blackholePeerURLs string
+		// if !s.isSSLTerminatingProxy {
+		// 	s.connectionMapMu.RLock()
+		// 	if peerURLs, ok := s.connectionMap[src.RemoteAddr().String()]; ok {
+		// 		if strings.Contains(peerURLs, blackholePeerURLs) {
+		// 			data = nil
+		// 		}
+		// 	} else {
+		// 		panic("missing connection record")
+		// 	}
+		// 	s.connectionMapMu.RUnlock()
+		// }
 		nr2 := len(data)
 		switch ptype {
 		case proxyTx:

@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -524,7 +525,8 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		peerAdvertiseURL.Host = fmt.Sprintf("localhost:%d", peer2Port)
 		transparentProxyURL := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", transparentProxyPort)}
 		if cfg.SSLTerminationProxy {
-			blackholeChannel := make(chan string, 10) // for the SSLTerminationProxy to talk to the transparent proxy
+			connectionMap := make(map[string]string)
+			var connectionMapMu sync.RWMutex
 			SSLTerminationProxyCfg = &proxy.ServerConfig{
 				Logger: zap.NewNop(),
 				To:     transparentProxyURL,
@@ -535,7 +537,8 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 					TrustedCAFile: CaPath,
 				},
 				IsSSLTerminatingProxy: true,
-				BlackholeChannel:      blackholeChannel,
+				ConnectionMap:         connectionMap,
+				ConnectionMapMu:       &connectionMapMu,
 			}
 
 			proxyCfg = &proxy.ServerConfig{
@@ -543,7 +546,8 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 				To:                    peerListenURL,
 				From:                  transparentProxyURL,
 				IsSSLTerminatingProxy: false,
-				BlackholeChannel:      blackholeChannel,
+				ConnectionMap:         connectionMap,
+				ConnectionMapMu:       &connectionMapMu,
 			}
 		} else {
 			proxyCfg = &proxy.ServerConfig{
@@ -668,6 +672,7 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		KeepDataDir:         cfg.KeepDataDir,
 		Name:                name,
 		PeerURL:             peerAdvertiseURL,
+		PeerListenURL:       peerListenURL,
 		ClientURL:           curl,
 		ClientHTTPURL:       clientHTTPURL,
 		MetricsURL:          murl,

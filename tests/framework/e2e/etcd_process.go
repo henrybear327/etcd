@@ -92,6 +92,7 @@ type EtcdServerProcessConfig struct {
 	Name string
 
 	PeerURL       url.URL
+	PeerListenURL url.URL
 	ClientURL     string
 	ClientHTTPURL string
 	MetricsURL    string
