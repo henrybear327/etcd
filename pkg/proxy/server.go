@@ -424,6 +424,25 @@ func (s *server) listenAndServe() {
 			continue
 		}
 
+		var f *os.File
+		if s.isSSLTerminatingProxy {
+			f, err = os.OpenFile("/tmp/terminating_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			f, err = os.OpenFile("/tmp/transparent_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		if _, err = f.WriteString(fmt.Sprintf("[New connection] from: %v to: %v\n", in.RemoteAddr(), in.LocalAddr())); err != nil {
+			panic(err)
+		}
+		f.Sync()
+		f.Close()
+
 		// if s.isSSLTerminatingProxy {
 		// 	// TODO
 		// } else {
@@ -435,7 +454,6 @@ func (s *server) listenAndServe() {
 			s.transmit(out, in)
 			out.Close()
 			in.Close()
-
 		}()
 		go func() {
 			defer s.closeWg.Done()
@@ -512,10 +530,6 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 			}
 		}
 
-		if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v from scheme: %v to scheme: %v\n", ptype, s.from.Scheme, s.to.Scheme)); err != nil {
-			panic(err)
-		}
-
 		if ptype == proxyTx {
 			/*
 				if we are isolating A
@@ -539,6 +553,7 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 				panic(err)
 			}
 		}
+		f.Sync()
 		f.Close()
 
 		// alters/corrupts/drops data
