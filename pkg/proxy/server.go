@@ -134,17 +134,23 @@ type Server interface {
 
 // ServerConfig defines proxy server configuration.
 type ServerConfig struct {
-	Logger                *zap.Logger
-	From                  url.URL
-	To                    url.URL
-	TLSInfo               transport.TLSInfo
-	TerminatingTLSInfo    transport.TLSInfo
-	DialTimeout           time.Duration
-	BufferSize            int
-	RetryInterval         time.Duration
+	Logger             *zap.Logger
+	From               url.URL
+	To                 url.URL
+	TLSInfo            transport.TLSInfo
+	TerminatingTLSInfo transport.TLSInfo
+	DialTimeout        time.Duration
+	BufferSize         int
+	RetryInterval      time.Duration
+
 	IsSSLTerminatingProxy bool
-	ConnectionMap         map[string]string
-	ConnectionMapMu       *sync.RWMutex
+	// for SSL termination proxy: 	put outgoing connection local addr - connection initiated by peerURLs
+	// for transparent proxy:		read incoming connection remote addr - check BlackholeMap to see if peerURLs is blocked
+	ConnectionMap   map[string]string
+	ConnectionMapMu *sync.RWMutex
+
+	BlackholeMap   map[string]bool // peerURLs to be blackholed - true
+	BlackholeMapMu *sync.RWMutex
 }
 
 type server struct {
@@ -153,6 +159,8 @@ type server struct {
 	isSSLTerminatingProxy bool
 	connectionMap         map[string]string
 	connectionMapMu       *sync.RWMutex
+	blackholeMap          map[string]bool
+	blackholeMapMu        *sync.RWMutex
 
 	from     url.URL
 	fromPort int
@@ -210,6 +218,8 @@ func NewServer(cfg ServerConfig) Server {
 		isSSLTerminatingProxy: cfg.IsSSLTerminatingProxy,
 		connectionMap:         cfg.ConnectionMap,
 		connectionMapMu:       cfg.ConnectionMapMu,
+		blackholeMap:          cfg.BlackholeMap,
+		blackholeMapMu:        cfg.BlackholeMapMu,
 
 		from: cfg.From,
 		to:   cfg.To,
@@ -288,6 +298,26 @@ func NewServer(cfg ServerConfig) Server {
 	go s.listenAndServe()
 
 	s.lg.Info("started proxying", zap.String("from", s.From()), zap.String("to", s.To()))
+
+	var f *os.File
+	if s.isSSLTerminatingProxy {
+		f, err = os.OpenFile("/tmp/terminating_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		f, err = os.OpenFile("/tmp/transparent_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+	}
+	s.blackholeMapMu.RLock()
+	f.WriteString(fmt.Sprintf("NewServer blackhole map %p\n", s.blackholeMap))
+	s.blackholeMapMu.RUnlock()
+
+	f.Sync()
+	f.Close()
+
 	return s
 }
 
@@ -427,25 +457,6 @@ func (s *server) listenAndServe() {
 			continue
 		}
 
-		var f *os.File
-		if s.isSSLTerminatingProxy {
-			f, err = os.OpenFile("/tmp/terminating_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-			if err != nil {
-				panic(err)
-			}
-		} else {
-			f, err = os.OpenFile("/tmp/transparent_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		if _, err = f.WriteString(fmt.Sprintf("[New connection] from: %v to: %v\n", in.RemoteAddr(), in.LocalAddr())); err != nil {
-			panic(err)
-		}
-		f.Sync()
-		f.Close()
-
 		s.closeWg.Add(2)
 		go func() {
 			defer s.closeWg.Done()
@@ -458,7 +469,11 @@ func (s *server) listenAndServe() {
 			if s.isSSLTerminatingProxy {
 				// when the connection is closed, we delete the entry from the map
 				s.connectionMapMu.Lock()
-				delete(s.connectionMap, out.LocalAddr().String())
+				port, err := getPort(out.LocalAddr().String())
+				if err != nil {
+					panic("")
+				}
+				delete(s.connectionMap, port)
 				s.connectionMapMu.Unlock()
 			}
 		}()
@@ -472,7 +487,11 @@ func (s *server) listenAndServe() {
 			if s.isSSLTerminatingProxy {
 				// when the connection is closed, we delete the entry from the map
 				s.connectionMapMu.Lock()
-				delete(s.connectionMap, out.LocalAddr().String())
+				port, err := getPort(out.LocalAddr().String())
+				if err != nil {
+					panic("")
+				}
+				delete(s.connectionMap, port)
 				s.connectionMapMu.Unlock()
 			}
 		}()
@@ -485,6 +504,19 @@ func (s *server) transmit(dst, src net.Conn) {
 
 func (s *server) receive(dst, src net.Conn) {
 	s.ioCopy(dst, src, proxyRx)
+}
+
+func getPort(host string) (string, error) {
+	if strings.HasPrefix(host, "https") {
+		return strings.Replace(host, "https://localhost:", "", 1), nil
+	}
+
+	_, port, err := net.SplitHostPort(host)
+	if err != nil {
+		return "", nil
+	}
+	// return strconv.Atoi(port)
+	return port, nil
 }
 
 type proxyType uint8
@@ -543,7 +575,7 @@ func (s *server) ioCopy(dst, src net.Conn, ptype proxyType) {
 			}
 		}
 
-		if ptype == proxyTx {
+		if s.isSSLTerminatingProxy && ptype == proxyTx {
 			/*
 				if we are isolating A
 				- the incoming traffic from other nodes to A will be blocked by the transparent proxy already
@@ -552,22 +584,34 @@ func (s *server) ioCopy(dst, src net.Conn, ptype proxyType) {
 				  the traffic coming from specific connections when looking at the peerURL field
 			*/
 			if req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(data))); err != nil {
-				if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] ReadRequest failed %v (%v)\n", string(data), err)); err != nil {
-					panic(err)
-				}
+				// if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] ReadRequest failed %v (%v)\n", string(data), err)); err != nil {
+				// 	panic(err)
+				// }
 			} else {
 				peerURLs := req.Header.Get("X-PeerURLs")
 
-				if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v X-PeerURLs %v\n", ptype, peerURLs)); err != nil {
-					panic(err)
-				}
+				if len(peerURLs) == 0 {
+					// we know that unless it's gRPC ot other messages, we should always have X-PeerURLs headers
+					if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v\n", req.Header)); err != nil {
+						panic(err)
+					}
+				} else {
+					s.connectionMapMu.Lock()
+					port, err := getPort(dst.LocalAddr().String())
+					if err != nil {
+						panic("")
+					}
+					blockingPort, err := getPort(peerURLs) // TODO: make this able to parse multiple peerURLs?
+					if err != nil {
+						panic("")
+					}
+					s.connectionMap[port] = blockingPort
+					s.connectionMapMu.Unlock()
 
-				s.connectionMapMu.Lock()
-				s.connectionMap[dst.LocalAddr().String()] = peerURLs
-				s.connectionMapMu.Unlock()
-			}
-			if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v data %v\n", ptype, string(data))); err != nil {
-				panic(err)
+					if _, err = f.WriteString(fmt.Sprintf("[Proxy Header] %v (localAddrPort, peerURLsPort) = (%v, %v)\n", ptype, port, blockingPort)); err != nil {
+						panic(err)
+					}
+				}
 			}
 		}
 		f.Sync()
@@ -590,20 +634,56 @@ func (s *server) ioCopy(dst, src net.Conn, ptype proxyType) {
 		default:
 			panic("unknown proxy type")
 		}
-		// gofail: var BlackholePeerURLsFailPoint struct{}
 
-		// var BlackholePeerURLsFailPoint string
-		// if !s.isSSLTerminatingProxy {
-		// 	s.connectionMapMu.RLock()
-		// 	if peerURLs, ok := s.connectionMap[src.RemoteAddr().String()]; ok {
-		// 		if strings.Contains(peerURLs, BlackholePeerURLsFailPoint) {
-		// 			data = nil
-		// 		}
-		// 	} else {
-		// 		panic("missing connection record")
-		// 	}
-		// 	s.connectionMapMu.RUnlock()
-		// }
+		// we also block off the traffic to targetted node
+		if !s.isSSLTerminatingProxy && data != nil {
+			var f *os.File
+			f, err = os.OpenFile("/tmp/transparent_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+			if err != nil {
+				panic(err)
+			}
+
+			var port string
+			switch ptype {
+			case proxyTx:
+				port, err = getPort(src.RemoteAddr().String())
+				if err != nil {
+					panic("")
+				}
+
+			case proxyRx:
+				port, err = getPort(dst.RemoteAddr().String())
+				if err != nil {
+					panic("")
+				}
+			default:
+				panic("unknown proxy type")
+			}
+
+			s.connectionMapMu.RLock()
+			if peerPort, ok := s.connectionMap[port]; ok {
+				f.WriteString(fmt.Sprintf("ioCopy reading from blackhole map %p\n", s.blackholeMap))
+				if _, err = f.WriteString(fmt.Sprintf("ioCopy s.connectionMap[%v] = %v (s.blackholeMap = %#v)\n", port, peerPort, s.blackholeMap)); err != nil {
+					panic(err)
+				}
+
+				s.blackholeMapMu.RLock()
+				if _, ok := s.blackholeMap[peerPort]; ok {
+					if _, err = f.WriteString(fmt.Sprintf("Dropping traffic to %v\n", peerPort)); err != nil {
+						panic(err)
+					}
+					data = nil
+				}
+				s.blackholeMapMu.RUnlock()
+			} else {
+				// we might have non-peer messages on the network
+			}
+			s.connectionMapMu.RUnlock()
+
+			f.Sync()
+			f.Close()
+		}
+
 		nr2 := len(data)
 		switch ptype {
 		case proxyTx:
@@ -999,6 +1079,43 @@ func (s *server) BlackholeTx() {
 		zap.String("from", s.From()),
 		zap.String("to", s.To()),
 	)
+
+	s.blackholeMapMu.Lock()
+	var f *os.File
+	var err error
+	if s.isSSLTerminatingProxy {
+		f, err = os.OpenFile("/tmp/terminating_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		f, err = os.OpenFile("/tmp/transparent_proxy.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			panic(err)
+		}
+	}
+	port, err := getPort(s.listener.Addr().String())
+	if err != nil {
+		panic("")
+	}
+	portInt, err := strconv.Atoi(port)
+	if err != nil {
+		panic("")
+	}
+	port = strconv.Itoa((portInt - 2))
+	f.WriteString("Block port = " + port + "\n")
+
+	s.blackholeMap[port] = true
+
+	f.WriteString(fmt.Sprintf("BlackholeTx reading from blackhole map %p\n", s.blackholeMap))
+	if _, err = f.WriteString(fmt.Sprintf("BlackholeTx s.blackholeMap = %#v)\n", s.blackholeMap)); err != nil {
+		panic(err)
+	}
+
+	s.blackholeMapMu.Unlock()
+
+	f.Sync()
+	f.Close()
 }
 
 func (s *server) UnblackholeTx() {
@@ -1008,6 +1125,19 @@ func (s *server) UnblackholeTx() {
 		zap.String("from", s.From()),
 		zap.String("to", s.To()),
 	)
+
+	s.blackholeMapMu.Lock()
+	port, err := getPort(s.listener.Addr().String())
+	if err != nil {
+		panic("")
+	}
+	portInt, err := strconv.Atoi(port)
+	if err != nil {
+		panic("")
+	}
+	port = strconv.Itoa((portInt - 2))
+	delete(s.blackholeMap, port)
+	s.blackholeMapMu.Unlock()
 }
 
 func (s *server) BlackholeRx() {

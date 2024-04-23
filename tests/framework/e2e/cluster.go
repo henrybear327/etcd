@@ -146,6 +146,8 @@ type EtcdProcessClusterConfig struct {
 	LazyFSEnabled       bool
 	PeerProxy           bool
 	SSLTerminationProxy bool
+	BlackholeMap        map[string]bool
+	BlackholeMapMu      *sync.RWMutex
 
 	// Process config
 
@@ -404,6 +406,10 @@ func InitEtcdProcessCluster(t testing.TB, cfg *EtcdProcessClusterConfig) (*EtcdP
 	if cfg.ServerConfig.SnapshotCount == 0 {
 		cfg.ServerConfig.SnapshotCount = etcdserver.DefaultSnapshotCount
 	}
+	if cfg.SSLTerminationProxy {
+		cfg.BlackholeMap = make(map[string]bool)
+		cfg.BlackholeMapMu = &sync.RWMutex{}
+	}
 
 	etcdCfgs := cfg.EtcdAllServerProcessConfigs(t)
 	epc := &EtcdProcessCluster{
@@ -496,6 +502,18 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 	clientHTTPPort := port + 4
 	transparentProxyPort := port + 5 // used when SSL termination proxy is turned on
 
+	/*
+		0
+		out = 20003
+		listen = 20005
+		1
+		out = 20009
+		listen = 20011
+		2
+		out = 20015
+		listen = 20017
+	*/
+
 	if cfg.Client.ConnectionType == ClientTLSAndNonTLS {
 		curl = clientURL(cfg.ClientScheme(), clientPort, ClientNonTLS)
 		curls = []string{curl, clientURL(cfg.ClientScheme(), clientPort, ClientTLS)}
@@ -527,6 +545,7 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		if cfg.SSLTerminationProxy {
 			connectionMap := make(map[string]string)
 			var connectionMapMu sync.RWMutex
+
 			SSLTerminationProxyCfg = &proxy.ServerConfig{
 				Logger: zap.NewNop(),
 				To:     transparentProxyURL,
@@ -539,6 +558,8 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 				IsSSLTerminatingProxy: true,
 				ConnectionMap:         connectionMap,
 				ConnectionMapMu:       &connectionMapMu,
+				BlackholeMap:          cfg.BlackholeMap,
+				BlackholeMapMu:        cfg.BlackholeMapMu,
 			}
 
 			proxyCfg = &proxy.ServerConfig{
@@ -548,6 +569,8 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 				IsSSLTerminatingProxy: false,
 				ConnectionMap:         connectionMap,
 				ConnectionMapMu:       &connectionMapMu,
+				BlackholeMap:          cfg.BlackholeMap,
+				BlackholeMapMu:        cfg.BlackholeMapMu,
 			}
 		} else {
 			proxyCfg = &proxy.ServerConfig{
