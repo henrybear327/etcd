@@ -174,6 +174,7 @@ func regressionScenarios(t *testing.T) []testScenario {
 				e2e.WithSnapshotCount(100),
 				e2e.WithPeerProxy(true),
 				e2e.WithIsPeerTLS(true),
+				e2e.WithSSLTerminationProxy(true),
 			),
 		})
 	}
