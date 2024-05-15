@@ -52,6 +52,10 @@ type Alarmer interface {
 	Alarm(ctx context.Context, ar *pb.AlarmRequest) (*pb.AlarmResponse, error)
 }
 
+type HealthServer interface {
+	CheckServerHealth(ctx context.Context, req *pb.HealthRequest, path string) (*pb.HealthResponse, error)
+}
+
 type Downgrader interface {
 	Downgrade(ctx context.Context, dr *pb.DowngradeRequest) (*pb.DowngradeResponse, error)
 }
@@ -80,6 +84,7 @@ type maintenanceServer struct {
 	d      Downgrader
 	vs     serverversion.Server
 	cg     ConfigGetter
+	hs     HealthServer
 
 	healthNotifier notifier
 }
@@ -98,6 +103,7 @@ func NewMaintenanceServer(s *etcdserver.EtcdServer, healthNotifier notifier) pb.
 		vs:             etcdserver.NewServerVersionAdapter(s),
 		healthNotifier: healthNotifier,
 		cg:             s,
+		hs:             s,
 	}
 	if srv.lg == nil {
 		srv.lg = zap.NewNop()
@@ -237,6 +243,42 @@ func (ms *maintenanceServer) HashKV(ctx context.Context, r *pb.HashKVRequest) (*
 
 func (ms *maintenanceServer) Alarm(ctx context.Context, ar *pb.AlarmRequest) (*pb.AlarmResponse, error) {
 	resp, err := ms.a.Alarm(ctx, ar)
+	if err != nil {
+		return nil, togRPCError(err)
+	}
+	if resp.Header == nil {
+		resp.Header = &pb.ResponseHeader{}
+	}
+	ms.hdr.fill(resp.Header)
+	return resp, nil
+}
+
+func (ms *maintenanceServer) Livez(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathLivez)
+	if err != nil {
+		return nil, togRPCError(err)
+	}
+	if resp.Header == nil {
+		resp.Header = &pb.ResponseHeader{}
+	}
+	ms.hdr.fill(resp.Header)
+	return resp, nil
+}
+
+func (ms *maintenanceServer) Readyz(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathReadyz)
+	if err != nil {
+		return nil, togRPCError(err)
+	}
+	if resp.Header == nil {
+		resp.Header = &pb.ResponseHeader{}
+	}
+	ms.hdr.fill(resp.Header)
+	return resp, nil
+}
+
+func (ms *maintenanceServer) Healthz(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathHealthz)
 	if err != nil {
 		return nil, togRPCError(err)
 	}
