@@ -103,7 +103,7 @@ func NewMaintenanceServer(s *etcdserver.EtcdServer, healthNotifier notifier) pb.
 		vs:             etcdserver.NewServerVersionAdapter(s),
 		healthNotifier: healthNotifier,
 		cg:             s,
-		hs:             s,
+		// hs:             s, /* FIXME */
 	}
 	if srv.lg == nil {
 		srv.lg = zap.NewNop()
@@ -254,7 +254,7 @@ func (ms *maintenanceServer) Alarm(ctx context.Context, ar *pb.AlarmRequest) (*p
 }
 
 func (ms *maintenanceServer) Livez(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
-	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathLivez)
+	resp, err := ms.hs.CheckServerHealth(ctx, req, PathLivez /* etcdserver.PathLivez */)
 	if err != nil {
 		return nil, togRPCError(err)
 	}
@@ -265,8 +265,17 @@ func (ms *maintenanceServer) Livez(ctx context.Context, req *pb.HealthRequest) (
 	return resp, nil
 }
 
+/*
+FIXME: compilation check hack
+*/
+const (
+	PathLivez   = "/livez"
+	PathReadyz  = "/readyz"
+	PathHealthz = "/healthz"
+)
+
 func (ms *maintenanceServer) Readyz(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
-	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathReadyz)
+	resp, err := ms.hs.CheckServerHealth(ctx, req, PathReadyz /* etcdserver.PathReadyz */)
 	if err != nil {
 		return nil, togRPCError(err)
 	}
@@ -278,7 +287,7 @@ func (ms *maintenanceServer) Readyz(ctx context.Context, req *pb.HealthRequest) 
 }
 
 func (ms *maintenanceServer) Healthz(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
-	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathHealthz)
+	resp, err := ms.hs.CheckServerHealth(ctx, req, PathHealthz /* etcdserver.PathHealthz */)
 	if err != nil {
 		return nil, togRPCError(err)
 	}
