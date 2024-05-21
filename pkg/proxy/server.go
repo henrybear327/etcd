@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/bits"
 	mrand "math/rand"
 	"net"
@@ -46,10 +47,8 @@ var (
 // small overhead (<500μs per request). Please run tests to compute actual
 // overhead.
 type Server interface {
-	// From returns proxy source address in "scheme://host:port" format.
-	From() string
-	// To returns proxy destination address in "scheme://host:port" format.
-	To() string
+	// Listen returns proxy listen address in "scheme://host:port" format.
+	Listen() string
 
 	// Ready returns when proxy is ready to serve.
 	Ready() <-chan struct{}
@@ -139,14 +138,12 @@ type Server interface {
 
 // ServerConfig defines proxy server configuration.
 type ServerConfig struct {
-	Logger         *zap.Logger
-	From           url.URL
-	To             url.URL
-	TLSInfo        transport.TLSInfo
-	DialTimeout    time.Duration
-	BufferSize     int
-	RetryInterval  time.Duration
-	IsForwardProxy bool
+	Logger        *zap.Logger
+	Listen        url.URL
+	TLSInfo       transport.TLSInfo
+	DialTimeout   time.Duration
+	BufferSize    int
+	RetryInterval time.Duration
 }
 
 const (
@@ -158,12 +155,8 @@ const (
 type server struct {
 	lg *zap.Logger
 
-	isForwardProxy bool
-
-	from     url.URL
-	fromPort int
-	to       url.URL
-	toPort   int
+	listen     url.URL
+	listenPort int
 
 	tlsInfo     transport.TLSInfo
 	dialTimeout time.Duration
@@ -218,10 +211,7 @@ func NewServer(cfg ServerConfig) Server {
 	s := &server{
 		lg: cfg.Logger,
 
-		isForwardProxy: cfg.IsForwardProxy,
-
-		from: cfg.From,
-		to:   cfg.To,
+		listen: cfg.Listen,
 
 		tlsInfo:     cfg.TLSInfo,
 		dialTimeout: cfg.DialTimeout,
@@ -240,13 +230,8 @@ func NewServer(cfg ServerConfig) Server {
 		blackholePeerMap: make(map[int]uint8),
 	}
 
-	if _, fromPort, err := net.SplitHostPort(cfg.From.Host); err == nil {
-		s.fromPort, _ = strconv.Atoi(fromPort)
-	}
-	if !s.isForwardProxy {
-		if _, toPort, err := net.SplitHostPort(cfg.To.Host); err == nil {
-			s.toPort, _ = strconv.Atoi(toPort)
-		}
+	if _, fromPort, err := net.SplitHostPort(cfg.Listen.Host); err == nil {
+		s.listenPort, _ = strconv.Atoi(fromPort)
 	}
 
 	if s.dialTimeout == 0 {
@@ -263,27 +248,22 @@ func NewServer(cfg ServerConfig) Server {
 	close(s.pauseTxc)
 	close(s.pauseRxc)
 
-	if strings.HasPrefix(s.from.Scheme, "http") {
-		s.from.Scheme = "tcp"
-	}
-	if !s.isForwardProxy {
-		if strings.HasPrefix(s.to.Scheme, "http") {
-			s.to.Scheme = "tcp"
-		}
+	if strings.HasPrefix(s.listen.Scheme, "http") {
+		s.listen.Scheme = "tcp"
 	}
 
-	addr := fmt.Sprintf(":%d", s.fromPort)
-	if s.fromPort == 0 { // unix
-		addr = s.from.Host
+	addr := fmt.Sprintf(":%d", s.listenPort)
+	if s.listenPort == 0 { // unix
+		addr = s.listen.Host
 	}
 
 	s.closeWg.Add(1)
 	var ln net.Listener
 	var err error
 	if !s.tlsInfo.Empty() {
-		ln, err = transport.NewListener(addr, s.from.Scheme, &s.tlsInfo)
+		ln, err = transport.NewListener(addr, s.listen.Scheme, &s.tlsInfo)
 	} else {
-		ln, err = net.Listen(s.from.Scheme, addr)
+		ln, err = net.Listen(s.listen.Scheme, addr)
 	}
 	if err != nil {
 		s.errc <- err
@@ -292,8 +272,8 @@ func NewServer(cfg ServerConfig) Server {
 	}
 
 	s.listener = &customListener{
-		l: ln,
 		s: s,
+		l: ln,
 	}
 
 	go func() {
@@ -303,15 +283,15 @@ func NewServer(cfg ServerConfig) Server {
 			Handler: &serverHandler{s: s},
 		}
 
-		s.lg.Info("proxy is listening on", zap.String("from", s.From()))
+		s.lg.Info("proxy is listening on", zap.String("listen on", s.Listen()))
 		close(s.readyc)
-		if err := s.httpServer.Serve(*s.listener); err != http.ErrServerClosed {
+		if err := s.httpServer.Serve(s.listener); err != http.ErrServerClosed {
 			// always returns error. ErrServerClosed on graceful close
 			panic(fmt.Sprintf("startHTTPServer Serve(): %v", err))
 		}
 	}()
 
-	s.lg.Info("started proxying", zap.String("from", s.From()), zap.String("to", s.To()))
+	s.lg.Info("started proxying", zap.String("listen on", s.Listen()))
 	return s
 }
 
@@ -322,7 +302,7 @@ type customListener struct {
 	l net.Listener
 }
 
-func (c customListener) Accept() (net.Conn, error) {
+func (c *customListener) Accept() (net.Conn, error) {
 	// we implement the L4 features here (pause / latency accept)
 	c.s.pauseAcceptMu.Lock()
 	pausec := c.s.pauseAcceptc
@@ -375,14 +355,14 @@ func (c customListener) Accept() (net.Conn, error) {
 
 // Close closes the listener.
 // Any blocked Accept operations will be unblocked and return errors.
-func (c customListener) Close() error {
+func (c *customListener) Close() error {
 	c.s.listenerMu.RLock()
 	defer c.s.listenerMu.RUnlock()
 	return c.l.Close()
 }
 
 // Addr returns the listener's network address.
-func (c customListener) Addr() net.Addr {
+func (c *customListener) Addr() net.Addr {
 	c.s.listenerMu.RLock()
 	defer c.s.listenerMu.RUnlock()
 	return c.l.Addr()
@@ -392,51 +372,53 @@ type serverHandler struct {
 	s *server
 }
 
-func (s *serverHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+func (sh *serverHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	hijacker, _ := resp.(http.Hijacker)
 	in, _, err := hijacker.Hijack()
 	if err != nil {
 		select {
-		case s.s.errc <- err:
+		case sh.s.errc <- err:
 			select {
-			case <-s.s.donec:
+			case <-sh.s.donec:
 				return
 			default:
 			}
-		case <-s.s.donec:
+		case <-sh.s.donec:
 			return
 		}
-		s.s.lg.Debug("ServeHTTP hijack error", zap.Error(err))
+		sh.s.lg.Debug("ServeHTTP hijack error", zap.Error(err))
 		panic(err)
 	}
 
 	// for CONNECT, we need to send 200 response back first
-	targetScheme := s.s.to.Scheme
-	targetHost := s.s.to.Host
+	targetScheme := ""
+	targetHost := ""
 	ctx := context.Background()
 	if req.Method == "CONNECT" {
 		in.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 
 		targetScheme = "tcp"
 		targetHost = req.URL.Host
+	} else {
+		log.Fatal("Wrong usage of the forward proxy. Please check your setup")
 	}
 
 	var out net.Conn
-	if !s.s.tlsInfo.Empty() {
+	if !sh.s.tlsInfo.Empty() {
 		var tp *http.Transport
-		tp, err = transport.NewTransport(s.s.tlsInfo, s.s.dialTimeout)
+		tp, err = transport.NewTransport(sh.s.tlsInfo, sh.s.dialTimeout)
 		if err != nil {
 			select {
-			case s.s.errc <- err:
+			case sh.s.errc <- err:
 				select {
-				case <-s.s.donec:
+				case <-sh.s.donec:
 					return
 				default:
 				}
-			case <-s.s.donec:
+			case <-sh.s.donec:
 				return
 			}
-			s.s.lg.Debug("failed to get new Transport", zap.Error(err))
+			sh.s.lg.Debug("failed to get new Transport", zap.Error(err))
 			return
 		}
 		out, err = tp.DialContext(ctx, targetScheme, targetHost)
@@ -445,16 +427,16 @@ func (s *serverHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	if err != nil {
 		select {
-		case s.s.errc <- err:
+		case sh.s.errc <- err:
 			select {
-			case <-s.s.donec:
+			case <-sh.s.donec:
 				return
 			default:
 			}
-		case <-s.s.donec:
+		case <-sh.s.donec:
 			return
 		}
-		s.s.lg.Debug("failed to dial", zap.Error(err))
+		sh.s.lg.Debug("failed to dial", zap.Error(err))
 		return
 	}
 
@@ -462,45 +444,38 @@ func (s *serverHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	dstPort, err = getPort(out.RemoteAddr())
 	if err != nil {
 		select {
-		case s.s.errc <- err:
+		case sh.s.errc <- err:
 			select {
-			case <-s.s.donec:
+			case <-sh.s.donec:
 				return
 			default:
 			}
-		case <-s.s.donec:
+		case <-sh.s.donec:
 			return
 		}
-		s.s.lg.Debug("failed to parse port in transmit", zap.Error(err))
+		sh.s.lg.Debug("failed to parse port in transmit", zap.Error(err))
 		return
 	}
 
-	s.s.closeHijackedConn.Add(2)
+	sh.s.closeHijackedConn.Add(2)
 	go func() {
-		defer s.s.closeHijackedConn.Done()
+		defer sh.s.closeHijackedConn.Done()
 		// read incoming bytes from listener, dispatch to outgoing connection
-		s.s.transmit(out, in, dstPort)
+		sh.s.transmit(out, in, dstPort)
 		out.Close()
 		in.Close()
 	}()
 	go func() {
-		defer s.s.closeHijackedConn.Done()
+		defer sh.s.closeHijackedConn.Done()
 		// read response from outgoing connection, write back to listener
-		s.s.receive(in, out, dstPort)
+		sh.s.receive(in, out, dstPort)
 		in.Close()
 		out.Close()
 	}()
 }
 
-func (s *server) From() string {
-	return fmt.Sprintf("%s://%s", s.from.Scheme, s.from.Host)
-}
-
-func (s *server) To() string {
-	if !s.isForwardProxy {
-		return fmt.Sprintf("%s://%s", s.to.Scheme, s.to.Host)
-	}
-	return ""
+func (s *server) Listen() string {
+	return fmt.Sprintf("%s://%s", s.listen.Scheme, s.listen.Host)
 }
 
 func getPort(addr net.Addr) (int, error) {
@@ -606,16 +581,16 @@ func (s *server) ioCopy(dst, src net.Conn, ptype proxyType, peerPort int) {
 				"modified tx",
 				zap.String("data-received", humanize.Bytes(uint64(nr1))),
 				zap.String("data-modified", humanize.Bytes(uint64(nr2))),
-				zap.String("from", s.From()),
-				zap.String("to", s.To()),
+				zap.String("proxy listen on", s.Listen()),
+				zap.Int("to peer port", peerPort),
 			)
 		case proxyRx:
 			s.lg.Debug(
 				"modified rx",
 				zap.String("data-received", humanize.Bytes(uint64(nr1))),
 				zap.String("data-modified", humanize.Bytes(uint64(nr2))),
-				zap.String("from", s.To()),
-				zap.String("to", s.From()),
+				zap.String("proxy listen on", s.Listen()),
+				zap.Int("to peer port", peerPort),
 			)
 		default:
 			panic("unknown proxy type")
@@ -733,15 +708,15 @@ func (s *server) ioCopy(dst, src net.Conn, ptype proxyType, peerPort int) {
 			s.lg.Debug(
 				"transmitted",
 				zap.String("data-size", humanize.Bytes(uint64(nr1))),
-				zap.String("from", s.From()),
-				zap.String("to", s.To()),
+				zap.String("proxy listen on", s.Listen()),
+				zap.Int("to peer port", peerPort),
 			)
 		case proxyRx:
 			s.lg.Debug(
 				"received",
 				zap.String("data-size", humanize.Bytes(uint64(nr1))),
-				zap.String("from", s.To()),
-				zap.String("to", s.From()),
+				zap.String("proxy listen on", s.Listen()),
+				zap.Int("to peer port", peerPort),
 			)
 		default:
 			panic("unknown proxy type")
@@ -784,8 +759,7 @@ func (s *server) PauseAccept() {
 
 	s.lg.Info(
 		"paused accept",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -803,8 +777,7 @@ func (s *server) UnpauseAccept() {
 
 	s.lg.Info(
 		"unpaused accept",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -822,8 +795,7 @@ func (s *server) DelayAccept(latency, rv time.Duration) {
 		zap.Duration("latency", d),
 		zap.Duration("given-latency", latency),
 		zap.Duration("given-latency-random-variable", rv),
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -836,8 +808,7 @@ func (s *server) UndelayAccept() {
 	s.lg.Info(
 		"removed accept latency",
 		zap.Duration("latency", d),
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -852,6 +823,7 @@ func (s *server) DelayTx(latency, rv time.Duration) {
 	if latency <= 0 {
 		return
 	}
+
 	d := computeLatency(latency, rv)
 	s.latencyTxMu.Lock()
 	s.latencyTx = d
@@ -862,8 +834,7 @@ func (s *server) DelayTx(latency, rv time.Duration) {
 		zap.Duration("latency", d),
 		zap.Duration("given-latency", latency),
 		zap.Duration("given-latency-random-variable", rv),
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -876,8 +847,7 @@ func (s *server) UndelayTx() {
 	s.lg.Info(
 		"removed transmit latency",
 		zap.Duration("latency", d),
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -902,8 +872,7 @@ func (s *server) DelayRx(latency, rv time.Duration) {
 		zap.Duration("latency", d),
 		zap.Duration("given-latency", latency),
 		zap.Duration("given-latency-random-variable", rv),
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -916,8 +885,7 @@ func (s *server) UndelayRx() {
 	s.lg.Info(
 		"removed receive latency",
 		zap.Duration("latency", d),
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -953,8 +921,7 @@ func (s *server) ModifyTx(f func([]byte) []byte) {
 
 	s.lg.Info(
 		"modifying tx",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -965,8 +932,7 @@ func (s *server) UnmodifyTx() {
 
 	s.lg.Info(
 		"unmodifyed tx",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -976,8 +942,7 @@ func (s *server) ModifyRx(f func([]byte) []byte) {
 	s.modifyRxMu.Unlock()
 	s.lg.Info(
 		"modifying rx",
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -988,8 +953,7 @@ func (s *server) UnmodifyRx() {
 
 	s.lg.Info(
 		"unmodifyed rx",
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -997,8 +961,7 @@ func (s *server) BlackholeTx() {
 	s.ModifyTx(func([]byte) []byte { return nil })
 	s.lg.Info(
 		"blackholed tx",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1006,8 +969,7 @@ func (s *server) UnblackholeTx() {
 	s.UnmodifyTx()
 	s.lg.Info(
 		"unblackholed tx",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1015,8 +977,7 @@ func (s *server) BlackholeRx() {
 	s.ModifyRx(func([]byte) []byte { return nil })
 	s.lg.Info(
 		"blackholed rx",
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1024,8 +985,7 @@ func (s *server) UnblackholeRx() {
 	s.UnmodifyRx()
 	s.lg.Info(
 		"unblackholed rx",
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1096,8 +1056,7 @@ func (s *server) PauseTx() {
 
 	s.lg.Info(
 		"paused tx",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1115,8 +1074,7 @@ func (s *server) UnpauseTx() {
 
 	s.lg.Info(
 		"unpaused tx",
-		zap.String("from", s.From()),
-		zap.String("to", s.To()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1127,8 +1085,7 @@ func (s *server) PauseRx() {
 
 	s.lg.Info(
 		"paused rx",
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
 
@@ -1146,7 +1103,6 @@ func (s *server) UnpauseRx() {
 
 	s.lg.Info(
 		"unpaused rx",
-		zap.String("from", s.To()),
-		zap.String("to", s.From()),
+		zap.String("proxy listen on", s.Listen()),
 	)
 }
