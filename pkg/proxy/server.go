@@ -230,9 +230,8 @@ func NewServer(cfg ServerConfig) Server {
 		blackholePeerMap: make(map[int]uint8),
 	}
 
-	if _, fromPort, err := net.SplitHostPort(cfg.Listen.Host); err == nil {
-		s.listenPort, _ = strconv.Atoi(fromPort)
-	}
+	var err error
+	var fromPort string
 
 	if s.dialTimeout == 0 {
 		s.dialTimeout = defaultDialTimeout
@@ -250,16 +249,26 @@ func NewServer(cfg ServerConfig) Server {
 
 	if strings.HasPrefix(s.listen.Scheme, "http") {
 		s.listen.Scheme = "tcp"
+
+		if _, fromPort, err = net.SplitHostPort(cfg.Listen.Host); err != nil {
+			s.errc <- err
+			s.Close()
+			return nil
+		}
+		if s.listenPort, err = strconv.Atoi(fromPort); err != nil {
+			s.errc <- err
+			s.Close()
+			return nil
+		}
 	}
 
 	addr := fmt.Sprintf(":%d", s.listenPort)
-	if s.listenPort == 0 { // unix
+	if strings.HasPrefix(s.listen.Scheme, "unix") { // unix
 		addr = s.listen.Host
 	}
 
 	s.closeWg.Add(1)
 	var ln net.Listener
-	var err error
 	if !s.tlsInfo.Empty() {
 		ln, err = transport.NewListener(addr, s.listen.Scheme, &s.tlsInfo)
 	} else {
@@ -268,12 +277,12 @@ func NewServer(cfg ServerConfig) Server {
 	if err != nil {
 		s.errc <- err
 		s.Close()
-		return s
+		return nil
 	}
 
 	s.listener = &customListener{
 		s: s,
-		l: ln,
+		l: &ln,
 	}
 
 	go func() {
@@ -299,7 +308,7 @@ func NewServer(cfg ServerConfig) Server {
 // thus, we need to encapsulate the L4 functionalities in our custom Listener
 type customListener struct {
 	s *server
-	l net.Listener
+	l *net.Listener
 }
 
 func (c *customListener) Accept() (net.Conn, error) {
@@ -315,6 +324,10 @@ func (c *customListener) Accept() (net.Conn, error) {
 
 	c.s.latencyAcceptMu.RLock()
 	lat := c.s.latencyAccept
+	c.s.lg.Info(
+		"get accept latency",
+		zap.Duration("latency", lat),
+	)
 	c.s.latencyAcceptMu.RUnlock()
 	if lat > 0 {
 		select {
@@ -325,7 +338,7 @@ func (c *customListener) Accept() (net.Conn, error) {
 	}
 
 	c.s.listenerMu.RLock()
-	conn, err := c.l.Accept()
+	conn, err := (*c.l).Accept()
 	c.s.listenerMu.RUnlock()
 	if err != nil {
 		select {
@@ -358,14 +371,14 @@ func (c *customListener) Accept() (net.Conn, error) {
 func (c *customListener) Close() error {
 	c.s.listenerMu.RLock()
 	defer c.s.listenerMu.RUnlock()
-	return c.l.Close()
+	return (*c.l).Close()
 }
 
 // Addr returns the listener's network address.
 func (c *customListener) Addr() net.Addr {
 	c.s.listenerMu.RLock()
 	defer c.s.listenerMu.RUnlock()
-	return c.l.Addr()
+	return (*c.l).Addr()
 }
 
 type serverHandler struct {
