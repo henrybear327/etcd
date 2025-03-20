@@ -259,7 +259,7 @@ func TestV3WatchFromCurrentRevision(t *testing.T) {
 
 			createdWatchID := cresp.WatchId
 			if cresp.Header == nil || cresp.Header.Revision != 1 {
-				t.Fatalf("#%d: header revision got +%v, wanted revison 1", i, cresp)
+				t.Fatalf("#%d: header revision got +%v, wanted revision 1", i, cresp)
 			}
 
 			// asynchronously create keys

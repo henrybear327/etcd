@@ -43,7 +43,7 @@ var ErrRevisionNotFound = errors.New("mvcc: revision not found")
 //
 // Compact a keyIndex removes the versions with smaller or equal to
 // rev except the largest one. If the generation becomes empty
-// during compaction, it will be removed. if all the generations get
+// during compaction, it will be removed. If all the generations get
 // removed, the keyIndex should be removed.
 //
 // For example:
@@ -245,7 +245,7 @@ func (ki *keyIndex) keep(atRev int64, available map[Revision]struct{}) {
 	if !g.isEmpty() {
 		// If the given `atRev` is a tombstone, we need to skip it.
 		//
-		// Note that this s different from the `compact` function which
+		// Note that this is different from the `compact` function which
 		// keeps tombstone in such case. We need to stay consistent with
 		// existing versions, ensuring they always generate the same hash
 		// values.
