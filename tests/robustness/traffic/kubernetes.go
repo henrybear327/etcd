@@ -220,7 +220,7 @@ func (t kubernetesTraffic) generateKey() string {
 	return fmt.Sprintf("/registry/%s/%s/%s", t.resource, t.namespace, stringutil.RandString(5))
 }
 
-func (t kubernetesTraffic) RunCompactLoop(ctx context.Context, c *client.RecordingClient, interval time.Duration, finish <-chan struct{}) {
+func (t kubernetesTraffic) RunCompactLoop(ctx context.Context, c *client.RecordingClient, interval time.Duration, finish <-chan struct{}, hashKVRevisionChan chan<- int64) {
 	// Based on https://github.com/kubernetes/apiserver/blob/7dd4904f1896e11244ba3c5a59797697709de6b6/pkg/storage/etcd3/compact.go#L112-L127
 	var compactTime int64
 	var rev int64
@@ -238,6 +238,8 @@ func (t kubernetesTraffic) RunCompactLoop(ctx context.Context, c *client.Recordi
 		if err != nil {
 			continue
 		}
+
+		hashKVRevisionChan <- rev
 	}
 }
 

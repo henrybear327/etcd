@@ -111,7 +111,7 @@ func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	g := errgroup.Group{}
-	var operationReport, watchReport, failpointClientReport []report.ClientReport
+	var failpointClientReport, operationReport, watchReport, KVHashCheckReport []report.ClientReport
 	failpointInjected := make(chan report.FailpointInjection, 1)
 
 	// using baseTime time-measuring operation to get monotonic clock reading
@@ -136,11 +136,14 @@ func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg
 		return nil
 	})
 	maxRevisionChan := make(chan int64, 1)
+	hashKVRevisionChan := make(chan int64, 1)
 	g.Go(func() error {
 		defer close(maxRevisionChan)
-		operationReport = traffic.SimulateTraffic(ctx, t, lg, clus, s.Profile, s.Traffic, failpointInjected, baseTime, ids)
+		defer close(hashKVRevisionChan)
+		operationReport = traffic.SimulateTraffic(ctx, t, lg, clus, s.Profile, s.Traffic, failpointInjected, hashKVRevisionChan, baseTime, ids)
 		maxRevision := operationsMaxRevision(operationReport)
 		maxRevisionChan <- maxRevision
+		hashKVRevisionChan <- maxRevision
 		lg.Info("Finished simulating Traffic", zap.Int64("max-revision", maxRevision))
 		return nil
 	})
@@ -148,8 +151,18 @@ func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg
 		watchReport = client.CollectClusterWatchEvents(ctx, t, clus, maxRevisionChan, s.Watch, baseTime, ids)
 		return nil
 	})
+	g.Go(func() error {
+		KVHashCheckReport = client.ClusterKVHashChecks(ctx, t, clus, hashKVRevisionChan, baseTime, ids)
+		return nil
+	})
 	g.Wait()
-	return append(operationReport, append(failpointClientReport, watchReport...)...)
+
+	returnedReports := make([]report.ClientReport, 0, len(failpointClientReport)+len(operationReport)+len(watchReport)+len(KVHashCheckReport))
+	returnedReports = append(returnedReports, failpointClientReport...)
+	returnedReports = append(returnedReports, operationReport...)
+	returnedReports = append(returnedReports, watchReport...)
+	returnedReports = append(returnedReports, KVHashCheckReport...)
+	return returnedReports
 }
 
 func randomizeTime(base time.Duration, jitter time.Duration) time.Duration {

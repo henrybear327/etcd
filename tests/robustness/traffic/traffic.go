@@ -54,7 +54,7 @@ var (
 	}
 )
 
-func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2e.EtcdProcessCluster, profile Profile, traffic Traffic, failpointInjected <-chan report.FailpointInjection, baseTime time.Time, ids identity.Provider) []report.ClientReport {
+func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2e.EtcdProcessCluster, profile Profile, traffic Traffic, failpointInjected <-chan report.FailpointInjection, hashKVRevisionChan chan<- int64, baseTime time.Time, ids identity.Provider) []report.ClientReport {
 	mux := sync.Mutex{}
 	endpoints := clus.EndpointsGRPC()
 
@@ -103,7 +103,7 @@ func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2
 				compactionPeriod = profile.CompactPeriod
 			}
 
-			traffic.RunCompactLoop(ctx, c, compactionPeriod, finish)
+			traffic.RunCompactLoop(ctx, c, compactionPeriod, finish, hashKVRevisionChan)
 			mux.Lock()
 			reports = append(reports, c.Report())
 			mux.Unlock()
@@ -199,6 +199,6 @@ func (p Profile) WithCompactionPeriod(cp time.Duration) Profile {
 
 type Traffic interface {
 	RunTrafficLoop(ctx context.Context, c *client.RecordingClient, qpsLimiter *rate.Limiter, ids identity.Provider, lm identity.LeaseIDStorage, nonUniqueWriteLimiter ConcurrencyLimiter, finish <-chan struct{})
-	RunCompactLoop(ctx context.Context, c *client.RecordingClient, period time.Duration, finish <-chan struct{})
+	RunCompactLoop(ctx context.Context, c *client.RecordingClient, period time.Duration, finish <-chan struct{}, hashKVRevisionChan chan<- int64)
 	ExpectUniqueRevision() bool
 }

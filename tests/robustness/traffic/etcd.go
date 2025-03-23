@@ -156,7 +156,7 @@ func (t etcdTraffic) RunTrafficLoop(ctx context.Context, c *client.RecordingClie
 	}
 }
 
-func (t etcdTraffic) RunCompactLoop(ctx context.Context, c *client.RecordingClient, period time.Duration, finish <-chan struct{}) {
+func (t etcdTraffic) RunCompactLoop(ctx context.Context, c *client.RecordingClient, period time.Duration, finish <-chan struct{}, hashKVRevisionChan chan<- int64) {
 	var lastRev int64 = 2
 	ticker := time.NewTicker(period)
 	defer ticker.Stop()
@@ -182,6 +182,9 @@ func (t etcdTraffic) RunCompactLoop(ctx context.Context, c *client.RecordingClie
 			continue
 		}
 		lastRev = compactRev
+
+		// check KVHash
+		hashKVRevisionChan <- lastRev
 	}
 }
 
