@@ -149,7 +149,10 @@ func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg
 		return nil
 	})
 	g.Wait()
-	return append(operationReport, append(failpointClientReport, watchReport...)...)
+
+	// we query for revision 0, which asks the hash to be computed on all keys
+	hashKvReport := client.CheckHashKV(ctx, t, clus, 0, baseTime, ids)
+	return append(hashKvReport, append(operationReport, append(failpointClientReport, watchReport...)...)...)
 }
 
 func randomizeTime(base time.Duration, jitter time.Duration) time.Duration {

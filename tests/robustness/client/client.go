@@ -371,3 +371,16 @@ func toWatchEvent(event clientv3.Event) (watch model.WatchEvent) {
 	}
 	return watch
 }
+
+func (c *RecordingClient) HashKV(ctx context.Context, rev int64) ([]*clientv3.HashKVResponse, error) {
+	endpoints := c.client.Endpoints()
+	var resp []*clientv3.HashKVResponse
+	for _, ep := range endpoints {
+		hashKV, err := c.client.HashKV(ctx, ep, rev)
+		if err != nil {
+			return nil, err
+		}
+		resp = append(resp, hashKV)
+	}
+	return resp, nil
+}
