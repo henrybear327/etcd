@@ -26,47 +26,40 @@ import (
 	"go.etcd.io/etcd/tests/v3/robustness/identity"
 )
 
+func getHashKV(ctx context.Context, t *testing.T, endpoints []string, rev int64) (int64, *clientv3.HashKVResponse) {
+	c, err := clientv3.New(clientv3.Config{
+		Endpoints:            endpoints,
+		Logger:               zap.NewNop(),
+		DialKeepAliveTime:    10 * time.Second,
+		DialKeepAliveTimeout: 100 * time.Millisecond,
+	})
+	if err != nil {
+		t.Error(err)
+		return 0, nil
+	}
+	defer c.Close()
+
+	hashKV, err := c.HashKV(ctx, c.Endpoints()[0], rev)
+	if err != nil {
+		t.Error(err)
+		return 0, nil
+	}
+
+	return hashKV.Header.Revision, hashKV
+}
+
 func CheckHashKV(ctx context.Context, t *testing.T, clus *e2e.EtcdProcessCluster, rev int64, baseTime time.Time, ids identity.Provider) {
 	hashKVs := make([]*clientv3.HashKVResponse, 0)
 	if rev == 0 {
-		// from any node, make a HashKV call to get the max revision
-		clusC, err := clientv3.New(clientv3.Config{
-			Endpoints:            clus.EndpointsGRPC(),
-			Logger:               zap.NewNop(),
-			DialKeepAliveTime:    10 * time.Second,
-			DialKeepAliveTimeout: 100 * time.Millisecond,
-		})
-		if err != nil {
-			t.Error(err)
-			return
-		}
-
-		hashKV, err := clusC.HashKV(ctx, clusC.Endpoints()[0], rev)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		rev = hashKV.Header.Revision
+		maxRevision, hashKV := getHashKV(ctx, t, clus.EndpointsGRPC(), rev)
+		rev = maxRevision
 		hashKVs = append(hashKVs, hashKV)
 	}
 
 	for _, member := range clus.Procs {
-		c, err := clientv3.New(clientv3.Config{
-			Endpoints:            member.EndpointsGRPC(),
-			Logger:               zap.NewNop(),
-			DialKeepAliveTime:    10 * time.Second,
-			DialKeepAliveTimeout: 100 * time.Millisecond,
-		})
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer c.Close()
-
-		hashKV, err := c.HashKV(ctx, c.Endpoints()[0], rev)
-		if err != nil {
-			t.Error(err)
-			return
+		maxRevision, hashKV := getHashKV(ctx, t, member.EndpointsGRPC(), rev)
+		if maxRevision != rev {
+			t.Errorf("Max revision between nodes should be the same. Want %v, get %v", rev, maxRevision)
 		}
 		hashKVs = append(hashKVs, hashKV)
 	}
