@@ -20,27 +20,63 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/framework/e2e"
 	"go.etcd.io/etcd/tests/v3/robustness/identity"
-	"go.etcd.io/etcd/tests/v3/robustness/report"
 )
 
-func CheckHashKV(ctx context.Context, t *testing.T, clus *e2e.EtcdProcessCluster, rev int64, baseTime time.Time, ids identity.Provider) []report.ClientReport {
-	reports := make([]report.ClientReport, len(clus.Procs))
+func CheckHashKV(ctx context.Context, t *testing.T, clus *e2e.EtcdProcessCluster, rev int64, baseTime time.Time, ids identity.Provider) {
 	HashKVs := make([]*clientv3.HashKVResponse, len(clus.Procs))
+	maxRevision := int64(0)
 	for i, member := range clus.Procs {
-		c, err := NewRecordingClient(member.EndpointsGRPC(), ids, baseTime)
+		c, err := clientv3.New(clientv3.Config{
+			Endpoints:            member.EndpointsGRPC(),
+			Logger:               zap.NewNop(),
+			DialKeepAliveTime:    10 * time.Second,
+			DialKeepAliveTimeout: 100 * time.Millisecond,
+		})
 		require.NoError(t, err)
 		defer c.Close()
 
-		hash, err := c.HashKV(ctx, rev)
-		require.NoError(t, err)
-		require.Lenf(t, hash, 1, "We should only have 1 HashKVResponse per request")
-		HashKVs[i] = hash[0]
+		var resp []*clientv3.HashKVResponse
+		for _, ep := range c.Endpoints() {
+			t.Logf("[CheckHashKV] calling endpoint %v with revision %v", c.Endpoints(), rev)
+			hashKV, err := c.HashKV(ctx, ep, rev)
+			require.NoError(t, err)
+			resp = append(resp, hashKV)
+		}
+		require.Lenf(t, resp, 1, "We should only have 1 HashKVResponse per request")
+		HashKVs[i] = resp[0]
+		t.Logf("[CheckHashKV] member %v, resp[0] = Hash %v HashRevision %v CompactRevision %v Header.Revision %v", i, resp[0].Hash, resp[0].HashRevision, resp[0].CompactRevision, resp[0].Header.Revision)
 
-		reports[i] = c.Report()
+		if maxRevision < resp[0].Header.Revision {
+			maxRevision = resp[0].Header.Revision
+		}
+	}
+
+	rev = maxRevision
+	for i, member := range clus.Procs {
+		c, err := clientv3.New(clientv3.Config{
+			Endpoints:            member.EndpointsGRPC(),
+			Logger:               zap.NewNop(),
+			DialKeepAliveTime:    10 * time.Second,
+			DialKeepAliveTimeout: 100 * time.Millisecond,
+		})
+		require.NoError(t, err)
+		defer c.Close()
+
+		var resp []*clientv3.HashKVResponse
+		for _, ep := range c.Endpoints() {
+			t.Logf("[CheckHashKV] calling endpoint %v with revision %v", c.Endpoints(), rev)
+			hashKV, err := c.HashKV(ctx, ep, rev)
+			require.NoError(t, err)
+			resp = append(resp, hashKV)
+		}
+		require.Lenf(t, resp, 1, "We should only have 1 HashKVResponse per request")
+		HashKVs[i] = resp[0]
+		t.Logf("[CheckHashKV] member %v, resp[0] = Hash %v HashRevision %v CompactRevision %v Header.Revision %v", i, resp[0].Hash, resp[0].HashRevision, resp[0].CompactRevision, resp[0].Header.Revision)
 	}
 
 	for i := 1; i < len(clus.Procs); i++ {
@@ -48,6 +84,4 @@ func CheckHashKV(ctx context.Context, t *testing.T, clus *e2e.EtcdProcessCluster
 		require.Equalf(t, HashKVs[i-1].CompactRevision, HashKVs[i].CompactRevision, "CompactRevision mismatch")
 		require.Equalf(t, HashKVs[i-1].Hash, HashKVs[1].Hash, "Hash mismatch")
 	}
-
-	return reports
 }
