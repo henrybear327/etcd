@@ -150,7 +150,6 @@ func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg
 	})
 	g.Wait()
 
-	// we query for revision 0, which asks the hash to be computed on all keys
 	client.CheckHashKV(ctx, t, clus, 0, baseTime, ids)
 	return append(operationReport, append(failpointClientReport, watchReport...)...)
 }
