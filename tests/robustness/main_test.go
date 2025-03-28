@@ -150,7 +150,10 @@ func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg
 	})
 	g.Wait()
 
-	client.CheckHashKV(ctx, t, clus, 0, baseTime, ids)
+	err := client.CheckHashKV(ctx, clus, 0, baseTime, ids)
+	if err != nil {
+		t.Error(err)
+	}
 	return append(operationReport, append(failpointClientReport, watchReport...)...)
 }
 

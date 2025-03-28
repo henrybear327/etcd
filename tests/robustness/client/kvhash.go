@@ -16,7 +16,7 @@ package client
 
 import (
 	"context"
-	"testing"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,53 +26,58 @@ import (
 	"go.etcd.io/etcd/tests/v3/robustness/identity"
 )
 
-func getHashKV(ctx context.Context, t *testing.T, endpoints []string, rev int64) (int64, *clientv3.HashKVResponse) {
+func CheckHashKV(ctx context.Context, clus *e2e.EtcdProcessCluster, rev int64, baseTime time.Time, ids identity.Provider) error {
 	c, err := clientv3.New(clientv3.Config{
-		Endpoints:            endpoints,
+		Endpoints:            clus.EndpointsGRPC(),
 		Logger:               zap.NewNop(),
 		DialKeepAliveTime:    10 * time.Second,
 		DialKeepAliveTimeout: 100 * time.Millisecond,
 	})
 	if err != nil {
-		t.Error(err)
-		return 0, nil
+		return err
 	}
 	defer c.Close()
 
-	hashKV, err := c.HashKV(ctx, c.Endpoints()[0], rev)
-	if err != nil {
-		t.Error(err)
-		return 0, nil
-	}
-
-	return hashKV.Header.Revision, hashKV
-}
-
-func CheckHashKV(ctx context.Context, t *testing.T, clus *e2e.EtcdProcessCluster, rev int64, baseTime time.Time, ids identity.Provider) {
 	hashKVs := make([]*clientv3.HashKVResponse, 0)
 	if rev == 0 {
-		maxRevision, hashKV := getHashKV(ctx, t, clus.EndpointsGRPC(), rev)
-		rev = maxRevision
+		hashKV, err := getHashKV(ctx, c, clus.EndpointsGRPC()[0], rev)
+		if err != nil {
+			return err
+		}
+		rev = hashKV.Header.Revision
 		hashKVs = append(hashKVs, hashKV)
 	}
 
 	for _, member := range clus.Procs {
-		maxRevision, hashKV := getHashKV(ctx, t, member.EndpointsGRPC(), rev)
-		if maxRevision != rev {
-			t.Errorf("Max revision between nodes should be the same. Want %v, get %v", rev, maxRevision)
+		hashKV, err := getHashKV(ctx, c, member.EndpointsGRPC()[0], rev)
+		if err != nil {
+			return err
+		}
+		if hashKV.Header.Revision != rev {
+			return fmt.Errorf("max revision between nodes should be the same. Want %v, get %v", rev, hashKV.Header.Revision)
 		}
 		hashKVs = append(hashKVs, hashKV)
 	}
 
 	for i := 1; i < len(clus.Procs); i++ {
 		if hashKVs[i-1].HashRevision != hashKVs[i].HashRevision {
-			t.Error("HashRevision mismatch")
+			return fmt.Errorf("hashRevision mismatch")
 		}
 		if hashKVs[i-1].CompactRevision != hashKVs[i].CompactRevision {
-			t.Error("CompactRevision mismatch")
+			return fmt.Errorf("compactRevision mismatch")
 		}
 		if hashKVs[i-1].Hash != hashKVs[i].Hash {
-			t.Error("Hash mismatch")
+			return fmt.Errorf("hash mismatch")
 		}
 	}
+	return nil
+}
+
+func getHashKV(ctx context.Context, c *clientv3.Client, endpoint string, rev int64) (*clientv3.HashKVResponse, error) {
+	hashKV, err := c.HashKV(ctx, endpoint, rev)
+	if err != nil {
+		return nil, err
+	}
+
+	return hashKV, nil
 }
