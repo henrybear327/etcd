@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"go.uber.org/zap"
@@ -61,7 +62,7 @@ func CollectClusterWatchEvents(ctx context.Context, lg *zap.Logger, endpoints []
 				return err
 			}
 			defer c.Close()
-			period := time.Millisecond
+			period := 10 * time.Millisecond
 			return openWatchPeriodically(ctx, &g, c, period, finish)
 		})
 	}
@@ -148,9 +149,15 @@ func openWatchPeriodically(ctx context.Context, g *errgroup.Group, c *RecordingC
 		case <-time.After(period):
 		}
 		g.Go(func() error {
+			resp, err := c.Get(ctx, "/key")
+			if err != nil {
+				return err
+			}
+			rev := resp.Header.Revision + (rand.Int64N(20) - 10)
+
 			watchCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
-			w := c.Watch(watchCtx, "", 0, true, true, true)
+			w := c.Watch(watchCtx, "", rev, true, true, true)
 			for {
 				select {
 				case <-ctx.Done():
