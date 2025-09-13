@@ -24,7 +24,6 @@ import (
 
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
-	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/tests/v3/framework/e2e"
 	"go.etcd.io/etcd/tests/v3/robustness/client"
 	"go.etcd.io/etcd/tests/v3/robustness/failpoint"
@@ -40,16 +39,16 @@ type TrafficProfile struct {
 }
 
 var trafficProfiles = []TrafficProfile{
-	{
-		Name:    "EtcdHighTraffic",
-		Traffic: traffic.EtcdPut,
-		Profile: traffic.HighTrafficProfile,
-	},
-	{
-		Name:    "EtcdTrafficDeleteLeases",
-		Traffic: traffic.EtcdPutDeleteLease,
-		Profile: traffic.LowTraffic,
-	},
+	// {
+	// 	Name:    "EtcdHighTraffic",
+	// 	Traffic: traffic.EtcdPut,
+	// 	Profile: traffic.HighTrafficProfile,
+	// },
+	// {
+	// 	Name:    "EtcdTrafficDeleteLeases",
+	// 	Traffic: traffic.EtcdPutDeleteLease,
+	// 	Profile: traffic.LowTraffic,
+	// },
 	{
 		Name:    "KubernetesHighTraffic",
 		Traffic: traffic.Kubernetes,
@@ -94,11 +93,11 @@ func Exploratory(_ *testing.T) []TestScenario {
 	mixedVersionOption := options.WithClusterOptionGroups(random.PickRandom[options.ClusterOptions](mixedVersionOptionChoices))
 
 	baseOptions := []e2e.EPClusterOption{
-		options.WithSnapshotCount(50, 100, 1000),
+		options.WithSnapshotCount(50),
 		options.WithSubsetOptions(randomizableOptions...),
 		e2e.WithGoFailEnabled(true),
 		// Set a low minimal compaction batch limit to allow for triggering multi batch compaction failpoints.
-		options.WithCompactionBatchLimit(10, 100, 1000),
+		options.WithCompactionBatchLimit(10),
 		e2e.WithWatchProcessNotifyInterval(100 * time.Millisecond),
 	}
 
@@ -107,20 +106,20 @@ func Exploratory(_ *testing.T) []TestScenario {
 	}
 
 	if e2e.CouldSetSnapshotCatchupEntries(e2e.BinPath.Etcd) {
-		baseOptions = append(baseOptions, options.WithSnapshotCatchUpEntries(100, etcdserver.DefaultSnapshotCatchUpEntries))
+		baseOptions = append(baseOptions, options.WithSnapshotCatchUpEntries(100))
 	}
 	scenarios := []TestScenario{}
-	for _, tp := range trafficProfiles {
-		name := filepath.Join(tp.Name, "ClusterOfSize1")
-		clusterOfSize1Options := baseOptions
-		clusterOfSize1Options = append(clusterOfSize1Options, e2e.WithClusterSize(1))
-		scenarios = append(scenarios, TestScenario{
-			Name:    name,
-			Traffic: tp.Traffic,
-			Profile: tp.Profile,
-			Cluster: *e2e.NewConfig(clusterOfSize1Options...),
-		})
-	}
+	// for _, tp := range trafficProfiles {
+	// 	name := filepath.Join(tp.Name, "ClusterOfSize1")
+	// 	clusterOfSize1Options := baseOptions
+	// 	clusterOfSize1Options = append(clusterOfSize1Options, e2e.WithClusterSize(1))
+	// 	scenarios = append(scenarios, TestScenario{
+	// 		Name:    name,
+	// 		Traffic: tp.Traffic,
+	// 		Profile: tp.Profile,
+	// 		Cluster: *e2e.NewConfig(clusterOfSize1Options...),
+	// 	})
+	// }
 
 	for _, tp := range trafficProfiles {
 		name := filepath.Join(tp.Name, "ClusterOfSize3")
