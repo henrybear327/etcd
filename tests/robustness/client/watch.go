@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"time"
 
 	"go.uber.org/zap"
@@ -63,7 +62,7 @@ func CollectClusterWatchEvents(ctx context.Context, lg *zap.Logger, endpoints []
 			}
 			defer c.Close()
 			period := 10 * time.Millisecond
-			return openWatchPeriodically(ctx, &g, c, period, finish)
+			return openWatchPeriodically(ctx, lg, &g, c, period, finish)
 		})
 	}
 
@@ -139,7 +138,7 @@ resetWatch:
 	}
 }
 
-func openWatchPeriodically(ctx context.Context, g *errgroup.Group, c *RecordingClient, period time.Duration, finish <-chan struct{}) error {
+func openWatchPeriodically(ctx context.Context, lg *zap.Logger, g *errgroup.Group, c *RecordingClient, period time.Duration, finish <-chan struct{}) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -149,11 +148,15 @@ func openWatchPeriodically(ctx context.Context, g *errgroup.Group, c *RecordingC
 		case <-time.After(period):
 		}
 		g.Go(func() error {
+			// targeting commit 866bc0717
 			resp, err := c.Get(ctx, "/key")
 			if err != nil {
 				return err
 			}
-			rev := resp.Header.Revision + (rand.Int64N(20) - 10)
+			// rev := resp.Header.Revision + (rand.Int64N(20) - 10) // reproduce OK (<2 min on my machine)
+			rev := resp.Header.Revision - 10 //reproduce OK (<1 min on my machine)
+			// rev := int64(0) // no reproduction
+			// lg.Info("revisions", zap.Int64("rev", rev), zap.Int64("resp rev", resp.Header.Revision))
 
 			watchCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
