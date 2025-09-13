@@ -38,6 +38,9 @@ func TestDataReports(t *testing.T) {
 		if file.Name() == ".gitignore" {
 			continue
 		}
+		if file.Name() == ".DS_Store" {
+			continue
+		}
 		t.Run(file.Name(), func(t *testing.T) {
 			lg := zaptest.NewLogger(t)
 			path := filepath.Join(testdataPath, file.Name())
