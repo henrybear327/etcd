@@ -31,12 +31,13 @@ import (
 	betesting "go.etcd.io/etcd/server/v3/storage/backend/testing"
 )
 
-// resetNextWatchIDForTesting resets the global watch ID counter to 0.
+// resetNextWatchIDForTesting resets the global watch ID counter and registry.
 // This should only be used in tests.
 func resetNextWatchIDForTesting() {
 	nextWatchIDMutex.Lock()
 	defer nextWatchIDMutex.Unlock()
 	nextWatchID = 0
+	assignedWatchIDs = make(map[WatchID]int)
 }
 
 // TestWatcherWatchID tests that each watcher provides unique watchID,
