@@ -20,8 +20,11 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,6 +54,24 @@ var (
 
 func TestMain(m *testing.M) {
 	testRunner.TestMain(m)
+}
+
+func TestRobustnessExploratorySingleCase(t *testing.T) {
+	testRunner.BeforeTest(t)
+	s := scenarios.Exploratory(t)[0]
+	t.Run(s.Name, func(t *testing.T) {
+		lg := zaptest.NewLogger(t)
+		s.Cluster.Logger = lg
+		ctx := t.Context()
+		c, err := e2e.NewEtcdProcessCluster(ctx, t, e2e.WithConfig(&s.Cluster))
+		require.NoError(t, err)
+		defer forcestopCluster(c)
+		s.Failpoint, err = failpoint.PickRandom(c, s.Profile)
+		require.NoError(t, err)
+		t.Run(s.Failpoint.Name(), func(t *testing.T) {
+			testRobustness(ctx, t, lg, s, c)
+		})
+	})
 }
 
 func TestRobustnessExploratory(t *testing.T) {
@@ -88,6 +109,7 @@ func TestRobustnessRegression(t *testing.T) {
 }
 
 func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s scenarios.TestScenario, c *e2e.EtcdProcessCluster) {
+	startHeapProfiler(t)
 	serverDataPaths := report.ServerDataPaths(c)
 	r := report.TestReport{
 		Logger:          lg,
@@ -122,6 +144,70 @@ func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s scenari
 		t.Error(err)
 	}
 	panicked = false
+}
+
+func startHeapProfiler(t *testing.T) {
+	profileDir, ok := os.LookupEnv("MEMORY_PROFILE_DIR")
+	if !ok || profileDir == "" {
+		return
+	}
+
+	sanitizedName := strings.ReplaceAll(t.Name(), "/", "_")
+	dir := filepath.Join(profileDir, sanitizedName, fmt.Sprintf("%d", time.Now().UnixNano()))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Logf("heap profiler: failed to create directory %s: %v", dir, err)
+		return
+	}
+
+	writeProfile := func(seq int, label string) {
+		runtime.GC()
+		filename := filepath.Join(dir, fmt.Sprintf("heap_%04d_%s_%d.pb.gz", seq, label, time.Now().UnixNano()))
+		f, err := os.Create(filename)
+		if err != nil {
+			t.Logf("heap profiler: failed to create %s: %v", filename, err)
+			return
+		}
+		defer f.Close()
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			t.Logf("heap profiler: failed to write %s: %v", filename, err)
+		}
+	}
+
+	writeProfile(0, "baseline")
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		seq := 1
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				writeProfile(seq, "periodic")
+				seq++
+			}
+		}
+	}()
+
+	t.Cleanup(func() {
+		close(stop)
+		wg.Wait()
+		// Count periodic profiles to get the next sequence number
+		seq := 1
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if strings.Contains(e.Name(), "_periodic_") {
+				seq++
+			}
+		}
+		writeProfile(seq, "final")
+		t.Logf("heap profiler: wrote profiles to %s", dir)
+	})
 }
 
 func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg *zap.Logger, clus *e2e.EtcdProcessCluster) (reports []report.ClientReport) {
