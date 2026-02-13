@@ -77,32 +77,32 @@ test-robustness-issue19179: /tmp/etcd-v3.5.17-failpoints/bin
 
 .PHONY: test-robustness-issue20221-fix20229-resumable
 test-robustness-issue20221-fix20229-resumable: /tmp/etcd-bc47e771-failpoints/bin
-	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_resumable --count 100 --failfast --bin-dir=/tmp/etcd-bc47e771-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
+	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_resumable --count 30 --failfast --bin-dir=/tmp/etcd-bc47e771-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
 	 echo "Failed to reproduce" || echo "Successful reproduction"
 
 .PHONY: test-robustness-issue20221-fix20229-resumable-peer-partition
 test-robustness-issue20221-fix20229-resumable-peer-partition: /tmp/etcd-bc47e771-peerProxyMap-failpoints/bin
-	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_resumable_PeerPartition --count 100 --failfast --bin-dir=/tmp/etcd-bc47e771-peerProxyMap-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
+	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_resumable_PeerPartition --count 30 --failfast --bin-dir=/tmp/etcd-bc47e771-peerProxyMap-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
 	 echo "Failed to reproduce" || echo "Successful reproduction"
 
 .PHONY: test-robustness-issue20221-fix20229-bookmarkable
 test-robustness-issue20221-fix20229-bookmarkable: /tmp/etcd-bc47e771-patch-failpoints/bin
-	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_bookmarkable --count 100 --failfast --bin-dir=/tmp/etcd-bc47e771-patch-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
+	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_bookmarkable --count 30 --failfast --bin-dir=/tmp/etcd-bc47e771-patch-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
 	 echo "Failed to reproduce" || echo "Successful reproduction"
 
 .PHONY: test-robustness-issue20221-fix20229-bookmarkable-peer-partition
 test-robustness-issue20221-fix20229-bookmarkable-peer-partition: /tmp/etcd-bc47e771-patch-peerProxyMap-failpoints/bin
-	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_bookmarkable_PeerPartition --count 100 --failfast --bin-dir=/tmp/etcd-bc47e771-patch-peerProxyMap-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
+	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20229_bookmarkable_PeerPartition --count 30 --failfast --bin-dir=/tmp/etcd-bc47e771-patch-peerProxyMap-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
 	 echo "Failed to reproduce" || echo "Successful reproduction"
 
 .PHONY: test-robustness-issue20221-fix20281
 test-robustness-issue20221-fix20281: /tmp/etcd-44a094a2-failpoints/bin
-	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20281 --count 100 --failfast --bin-dir=/tmp/etcd-44a094a2-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
+	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20281 --count 30 --failfast --bin-dir=/tmp/etcd-44a094a2-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
 	 echo "Failed to reproduce" || echo "Successful reproduction"
 
 .PHONY: test-robustness-issue20221-fix20281-peer-partition
 test-robustness-issue20221-fix20281-peer-partition: /tmp/etcd-44a094a2-peerProxyMap-failpoints/bin
-	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20281_PeerPartition --count 100 --failfast --bin-dir=/tmp/etcd-44a094a2-peerProxyMap-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
+	GO_TEST_FLAGS='-v --run=TestRobustnessRegression/Issue20221_fix20281_PeerPartition --count 30 --failfast --bin-dir=/tmp/etcd-44a094a2-peerProxyMap-failpoints/bin' $(TOPLEVEL_MAKE) test-robustness && \
 	 echo "Failed to reproduce" || echo "Successful reproduction"
 
 # Etcd API usage by Kubernetes

@@ -1,0 +1,133 @@
+➜  forward-proxy git:(robustness/forward-proxy-blackhole) ✗ time ./run-robustness-tests.sh
+==============================================
+Running 6 targets x 5 runs each (count=30)
+Started at Fri Feb 13 15:34:15 CET 2026
+==============================================
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-resumable
+======================================================================
+mktemp: mkstemp failed on /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run1-XXXXXX.log: File exists
+  Run 1: log -> 
+./run-robustness-tests.sh: line 47: : No such file or directory
+grep: : No such file or directory
+grep: : No such file or directory
+grep: : No such file or directory
+  Run 1: OTHER (0s, exit=1)
+tail: : No such file or directory
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run2-XXXXXX.log
+^C
+./run-robustness-tests.sh  7.40s user 7.52s system 117% cpu 12.660 total
+➜  forward-proxy git:(robustness/forward-proxy-blackhole) ✗ time ./run-robustness-tests.sh
+==============================================
+Running 6 targets x 5 runs each (count=30)
+Started at Fri Feb 13 15:34:46 CET 2026
+==============================================
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-resumable
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run1-XXXXXX.log
+  Run 1: REPRODUCED in 364s (broke Resumable)
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run2-XXXXXX.log
+  Run 2: REPRODUCED in 103s (broke Reliable)
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run3-XXXXXX.log
+  Run 3: REPRODUCED in 843s (broke Reliable)
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run4-XXXXXX.log
+  Run 4: REPRODUCED in 23s (broke Reliable)
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run5-XXXXXX.log
+  Run 5: REPRODUCED in 473s (broke Resumable)
+  => Result: 5/5 reproduced, avg 361s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-resumable-peer-partition
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run1-XXXXXX.log
+  Run 1: REPRODUCED in 32s (broke Resumable)
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run2-XXXXXX.log
+  Run 2: REPRODUCED in 57s (broke Reliable)
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run3-XXXXXX.log
+  Run 3: REPRODUCED in 70s (broke Reliable)
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run4-XXXXXX.log
+  Run 4: REPRODUCED in 54s (broke Resumable)
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run5-XXXXXX.log
+  Run 5: REPRODUCED in 28s (broke Reliable)
+  => Result: 5/5 reproduced, avg 48s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-bookmarkable
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run1-XXXXXX.log
+  Run 1: REPRODUCED in 34s (broke Reliable)
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run2-XXXXXX.log
+  Run 2: REPRODUCED in 140s (broke Reliable)
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run3-XXXXXX.log
+  Run 3: REPRODUCED in 183s (broke Reliable)
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run4-XXXXXX.log
+  Run 4: REPRODUCED in 33s (broke Reliable)
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run5-XXXXXX.log
+  Run 5: REPRODUCED in 32s (broke Resumable)
+  => Result: 5/5 reproduced, avg 84s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-bookmarkable-peer-partition
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run1-XXXXXX.log
+  Run 1: REPRODUCED in 23s (broke Resumable)
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run2-XXXXXX.log
+  Run 2: REPRODUCED in 26s (broke Resumable)
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run3-XXXXXX.log
+  Run 3: REPRODUCED in 23s (broke Resumable)
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run4-XXXXXX.log
+  Run 4: REPRODUCED in 62s (broke Resumable)
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run5-XXXXXX.log
+  Run 5: REPRODUCED in 24s (broke Resumable)
+  => Result: 5/5 reproduced, avg 31s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20281
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run1-XXXXXX.log
+  Run 1: REPRODUCED in 238s (broke Resumable)
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run2-XXXXXX.log
+  Run 2: REPRODUCED in 31s (broke Resumable)
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run3-XXXXXX.log
+  Run 3: REPRODUCED in 138s (broke Reliable)
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run4-XXXXXX.log
+  Run 4: REPRODUCED in 347s (broke Reliable)
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run5-XXXXXX.log
+  Run 5: REPRODUCED in 70s (broke Resumable)
+  => Result: 5/5 reproduced, avg 164s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20281-peer-partition
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run1-XXXXXX.log
+  Run 1: REPRODUCED in 20s (broke Resumable)
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run2-XXXXXX.log
+  Run 2: REPRODUCED in 20s (broke Resumable)
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run3-XXXXXX.log
+  Run 3: REPRODUCED in 32s (broke Reliable)
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run4-XXXXXX.log
+  Run 4: REPRODUCED in 32s (broke Resumable)
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run5-XXXXXX.log
+  Run 5: REPRODUCED in 50s (broke Resumable)
+  => Result: 5/5 reproduced, avg 30s
+
+./run-robustness-tests.sh: line 100: e: command not found
+==============================================
+SUMMARY TABLE
+==============================================
+
+Target                                                  | Repro |   Avg |   Min |   Max | Durations
+--------------------------------------------------------+-------+-------+-------+-------+-----------
+test-robustness-issue20221-fix20229-resumable           | 5/5   |  361s |   23s |  843s | 364s 103s 843s 23s 473s 
+test-robustness-issue20221-fix20229-resumable-peer-partition | 5/5   |   48s |   28s |   70s | 32s 57s 70s 54s 28s 
+test-robustness-issue20221-fix20229-bookmarkable        | 5/5   |   84s |   32s |  183s | 34s 140s 183s 33s 32s 
+test-robustness-issue20221-fix20229-bookmarkable-peer-partition | 5/5   |   31s |   23s |   62s | 23s 26s 23s 62s 24s 
+test-robustness-issue20221-fix20281                     | 5/5   |  164s |   31s |  347s | 238s 31s 138s 347s 70s 
+test-robustness-issue20221-fix20281-peer-partition      | 5/5   |   30s |   20s |   50s | 20s 20s 32s 32s 50s 
+
+Finished at Fri Feb 13 16:34:52 CET 2026
+==============================================
+./run-robustness-tests.sh  8632.72s user 6954.12s system 432% cpu 1:00:05.66 total
