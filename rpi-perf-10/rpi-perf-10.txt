@@ -1,0 +1,173 @@
+➜  etcd git:(robustness/forward-proxy-blackhole) ✗ time ./run-robustness-tests.sh 10
+==============================================
+Running 6 targets x 10 runs each (count=30)
+Started at Sat Feb 14 04:00:31 CST 2026
+==============================================
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-resumable
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run1-DDllUM.log
+  Run 1: REPRODUCED in 32s (broke Resumable), iter=1/30, blackhole=1s/32s
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run2-Zzlsvp.log
+  Run 2: REPRODUCED in 27s (broke Resumable), iter=1/30, blackhole=1s/27s
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run3-2b7ddm.log
+  Run 3: REPRODUCED in 86s (broke Resumable), iter=3/30, blackhole=13s/86s
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run4-7Drxz0.log
+  Run 4: REPRODUCED in 62s (broke Resumable), iter=2/30, blackhole=9s/62s
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run5-K52ynm.log
+  Run 5: REPRODUCED in 50s (broke Resumable), iter=2/30, blackhole=6s/50s
+  Run 6: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run6-HoEwR2.log
+  Run 6: REPRODUCED in 28s (broke Resumable), iter=1/30, blackhole=2s/28s
+  Run 7: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run7-RfzfMg.log
+  Run 7: REPRODUCED in 50s (broke Resumable), iter=2/30, blackhole=6s/50s
+  Run 8: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run8-eaKjvk.log
+  Run 8: REPRODUCED in 27s (broke Resumable), iter=1/30, blackhole=1s/27s
+  Run 9: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run9-oyDM9k.log
+  Run 9: REPRODUCED in 38s (broke Resumable), iter=1/30, blackhole=4s/38s
+  Run 10: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-run10-PeIfnX.log
+  Run 10: REPRODUCED in 100s (broke Resumable), iter=4/30, blackhole=13s/100s
+  => Result: 10/10 reproduced, avg 50s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-resumable-peer-partition
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run1-OqjjLM.log
+  Run 1: REPRODUCED in 30s (broke Resumable), iter=1/30, blackhole=1s/30s
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run2-ts25rP.log
+  Run 2: REPRODUCED in 26s (broke Resumable), iter=1/30, blackhole=0s/26s
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run3-Y7tTEW.log
+  Run 3: REPRODUCED in 25s (broke Resumable), iter=1/30, blackhole=1s/25s
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run4-8fILsb.log
+  Run 4: REPRODUCED in 21s (broke Resumable), iter=1/30, blackhole=0s/21s
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run5-M72I21.log
+  Run 5: REPRODUCED in 32s (broke Resumable), iter=2/30, blackhole=1s/32s
+  Run 6: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run6-ZYCwIY.log
+  Run 6: REPRODUCED in 38s (broke Resumable), iter=2/30, blackhole=1s/38s
+  Run 7: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run7-vFhcgP.log
+  Run 7: REPRODUCED in 19s (broke Resumable), iter=1/30, blackhole=0s/19s
+  Run 8: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run8-IhPhZL.log
+  Run 8: REPRODUCED in 26s (broke Resumable), iter=1/30, blackhole=0s/26s
+  Run 9: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run9-Wbj7D3.log
+  Run 9: REPRODUCED in 20s (broke Resumable), iter=1/30, blackhole=0s/20s
+  Run 10: log -> /tmp/robustness-test-robustness-issue20221-fix20229-resumable-peer-partition-run10-3vEPBN.log
+  Run 10: REPRODUCED in 48s (broke Resumable), iter=3/30, blackhole=3s/48s
+  => Result: 10/10 reproduced, avg 28s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-bookmarkable
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run1-DuMqzC.log
+  Run 1: REPRODUCED in 29s (broke Resumable), iter=1/30, blackhole=3s/29s
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run2-lBYtdh.log
+  Run 2: REPRODUCED in 30s (broke Resumable), iter=1/30, blackhole=3s/30s
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run3-QVqonm.log
+  Run 3: REPRODUCED in 42s (broke Resumable), iter=1/30, blackhole=5s/42s
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run4-xkKymk.log
+  Run 4: REPRODUCED in 46s (broke Resumable), iter=1/30, blackhole=6s/46s
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run5-F1jF1L.log
+  Run 5: REPRODUCED in 29s (broke Resumable), iter=1/30, blackhole=3s/29s
+  Run 6: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run6-g3d9Ju.log
+  Run 6: REPRODUCED in 49s (broke Resumable), iter=1/30, blackhole=5s/49s
+  Run 7: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run7-w9b8PE.log
+  Run 7: REPRODUCED in 29s (broke Resumable), iter=1/30, blackhole=3s/29s
+  Run 8: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run8-FwR3iV.log
+  Run 8: REPRODUCED in 85s (broke Resumable), iter=2/30, blackhole=13s/85s
+  Run 9: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run9-LIZAZE.log
+  Run 9: REPRODUCED in 59s (broke Resumable), iter=2/30, blackhole=11s/59s
+  Run 10: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-run10-xrWRwM.log
+  Run 10: REPRODUCED in 40s (broke Resumable), iter=1/30, blackhole=5s/40s
+  => Result: 10/10 reproduced, avg 43s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20229-bookmarkable-peer-partition
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run1-7w10PX.log
+  Run 1: REPRODUCED in 20s (broke Resumable), iter=1/30, blackhole=0s/20s
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run2-ZrMZGF.log
+  Run 2: REPRODUCED in 35s (broke Resumable), iter=1/30, blackhole=0s/35s
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run3-Ju4C5r.log
+  Run 3: REPRODUCED in 39s (broke Resumable), iter=2/30, blackhole=0s/39s
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run4-48JY6G.log
+  Run 4: REPRODUCED in 27s (broke Resumable), iter=1/30, blackhole=0s/27s
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run5-SEn1kE.log
+  Run 5: REPRODUCED in 19s (broke Resumable), iter=1/30, blackhole=0s/19s
+  Run 6: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run6-OmwUfH.log
+  Run 6: REPRODUCED in 21s (broke Resumable), iter=1/30, blackhole=0s/21s
+  Run 7: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run7-p0jO34.log
+  Run 7: REPRODUCED in 20s (broke Resumable), iter=1/30, blackhole=0s/20s
+  Run 8: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run8-JXI7Fk.log
+  Run 8: REPRODUCED in 27s (broke Resumable), iter=1/30, blackhole=0s/27s
+  Run 9: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run9-jJlLEx.log
+  Run 9: REPRODUCED in 40s (broke Resumable), iter=1/30, blackhole=0s/40s
+  Run 10: log -> /tmp/robustness-test-robustness-issue20221-fix20229-bookmarkable-peer-partition-run10-rHQimz.log
+  Run 10: REPRODUCED in 22s (broke Resumable), iter=1/30, blackhole=0s/22s
+  => Result: 10/10 reproduced, avg 27s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20281
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run1-Idtglo.log
+  Run 1: REPRODUCED in 128s (broke Resumable), iter=4/30, blackhole=19s/128s
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run2-0xMQwk.log
+  Run 2: REPRODUCED in 42s (broke Resumable), iter=1/30, blackhole=2s/42s
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run3-Gc5t3h.log
+  Run 3: REPRODUCED in 102s (broke Resumable), iter=3/30, blackhole=14s/102s
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run4-7I08n5.log
+  Run 4: REPRODUCED in 27s (broke Resumable), iter=1/30, blackhole=2s/27s
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run5-8amXJP.log
+  Run 5: REPRODUCED in 39s (broke Resumable), iter=1/30, blackhole=4s/39s
+  Run 6: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run6-1GJALF.log
+  Run 6: REPRODUCED in 137s (broke Resumable), iter=1/30, blackhole=3s/137s
+  Run 7: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run7-wvjPko.log
+  Run 7: REPRODUCED in 43s (broke Resumable), iter=1/30, blackhole=4s/43s
+  Run 8: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run8-sDLuJe.log
+  Run 8: REPRODUCED in 27s (broke Resumable), iter=1/30, blackhole=3s/27s
+  Run 9: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run9-Ee3rNP.log
+  Run 9: REPRODUCED in 162s (broke Resumable), iter=4/30, blackhole=17s/162s
+  Run 10: log -> /tmp/robustness-test-robustness-issue20221-fix20281-run10-khypzM.log
+  Run 10: REPRODUCED in 100s (broke Resumable), iter=3/30, blackhole=16s/100s
+  => Result: 10/10 reproduced, avg 80s
+
+======================================================================
+TARGET: test-robustness-issue20221-fix20281-peer-partition
+======================================================================
+  Run 1: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run1-Zv3nBL.log
+  Run 1: REPRODUCED in 34s (broke Resumable), iter=2/30, blackhole=1s/34s
+  Run 2: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run2-wwgkH7.log
+  Run 2: REPRODUCED in 31s (broke Resumable), iter=2/30, blackhole=0s/31s
+  Run 3: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run3-ITgl4G.log
+  Run 3: REPRODUCED in 37s (broke Resumable), iter=2/30, blackhole=1s/37s
+  Run 4: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run4-J80tx7.log
+  Run 4: REPRODUCED in 24s (broke Resumable), iter=1/30, blackhole=1s/24s
+  Run 5: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run5-lu6uNj.log
+  Run 5: REPRODUCED in 32s (broke Resumable), iter=2/30, blackhole=1s/32s
+  Run 6: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run6-yu32Jb.log
+  Run 6: REPRODUCED in 24s (broke Resumable), iter=1/30, blackhole=1s/24s
+  Run 7: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run7-n6MuKk.log
+  Run 7: REPRODUCED in 60s (broke Resumable), iter=4/30, blackhole=3s/60s
+  Run 8: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run8-bZpaum.log
+  Run 8: REPRODUCED in 24s (broke Resumable), iter=1/30, blackhole=0s/24s
+  Run 9: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run9-srB9OV.log
+  Run 9: REPRODUCED in 24s (broke Resumable), iter=1/30, blackhole=1s/24s
+  Run 10: log -> /tmp/robustness-test-robustness-issue20221-fix20281-peer-partition-run10-IjCgKc.log
+  Run 10: REPRODUCED in 26s (broke Resumable), iter=1/30, blackhole=1s/26s
+  => Result: 10/10 reproduced, avg 31s
+
+==============================================
+SUMMARY TABLE
+==============================================
+
+Target                                                           | Repro | AvgIter |   Avg |   Min |   Max |    BH/Run | Durations
+-----------------------------------------------------------------+-------+---------+-------+-------+-------+-----------+-----------
+test-robustness-issue20221-fix20229-resumable                    | 10/10   |    1/30 |   50s |   27s |  100s |   5s/ 50s | 32s 27s 86s 62s 50s 28s 50s 27s 38s 100s
+test-robustness-issue20221-fix20229-resumable-peer-partition     | 10/10   |    1/30 |   28s |   19s |   48s |   0s/ 28s | 30s 26s 25s 21s 32s 38s 19s 26s 20s 48s
+test-robustness-issue20221-fix20229-bookmarkable                 | 10/10   |    1/30 |   43s |   29s |   85s |   5s/ 43s | 29s 30s 42s 46s 29s 49s 29s 85s 59s 40s
+test-robustness-issue20221-fix20229-bookmarkable-peer-partition  | 10/10   |    1/30 |   27s |   19s |   40s |   0s/ 27s | 20s 35s 39s 27s 19s 21s 20s 27s 40s 22s
+test-robustness-issue20221-fix20281                              | 10/10   |    2/30 |   80s |   27s |  162s |   8s/ 80s | 128s 42s 102s 27s 39s 137s 43s 27s 162s 100s
+test-robustness-issue20221-fix20281-peer-partition               | 10/10   |    1/30 |   31s |   24s |   60s |   1s/ 31s | 34s 31s 37s 24s 32s 24s 60s 24s 24s 26s
+
+Finished at Sat Feb 14 04:44:09 CST 2026
+==============================================
+./run-robustness-tests.sh 10  3449.36s user 626.23s system 155% cpu 43:37.41 total
+
