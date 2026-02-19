@@ -39,7 +39,7 @@ var (
 	WatchTimeout                  = 500 * time.Millisecond
 	MultiOpTxnOpCount             = 4
 	DefaultCompactionPeriod       = 200 * time.Millisecond
-	DefaultRevisionOffset         = int64(100)
+	DefaultRevisionOffset         = int64(1000000)
 
 	LowTraffic = Profile{
 		MinimalQPS:                     100,
