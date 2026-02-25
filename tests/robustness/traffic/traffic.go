@@ -29,17 +29,30 @@ import (
 	"go.etcd.io/etcd/tests/v3/robustness/client"
 	"go.etcd.io/etcd/tests/v3/robustness/identity"
 	"go.etcd.io/etcd/tests/v3/robustness/model"
+	"go.etcd.io/etcd/tests/v3/robustness/random"
 	"go.etcd.io/etcd/tests/v3/robustness/report"
 	"go.etcd.io/etcd/tests/v3/robustness/validate"
 )
 
+type Range struct {
+	Min int64
+	Max int64
+}
+
+func (r Range) Rand() int64 {
+	if r.Min == r.Max {
+		return r.Min
+	}
+	return random.RandRange(r.Min, r.Max+1)
+}
+
 var (
-	DefaultLeaseTTL         int64 = 7200
-	RequestTimeout                = 200 * time.Millisecond
-	WatchTimeout                  = 500 * time.Millisecond
-	MultiOpTxnOpCount             = 4
-	DefaultCompactionPeriod       = 200 * time.Millisecond
-	DefaultRevisionOffset         = int64(100)
+	DefaultLeaseTTL            int64 = 7200
+	RequestTimeout                   = 200 * time.Millisecond
+	WatchTimeout                     = 500 * time.Millisecond
+	MultiOpTxnOpCount                = 4
+	DefaultCompactionPeriod          = 200 * time.Millisecond
+	DefaultRevisionOffsetRange       = Range{Min: -100, Max: 100}
 
 	LowTraffic = Profile{
 		MinimalQPS:                     100,
@@ -48,6 +61,7 @@ var (
 		MemberClientCount:              6,
 		ClusterClientCount:             2,
 		MaxNonUniqueRequestConcurrency: 3,
+		RevisionOffsetRange:            DefaultRevisionOffsetRange,
 	}
 	HighTrafficProfile = Profile{
 		MinimalQPS:                     100,
@@ -56,6 +70,7 @@ var (
 		MemberClientCount:              6,
 		ClusterClientCount:             2,
 		MaxNonUniqueRequestConcurrency: 3,
+		RevisionOffsetRange:            DefaultRevisionOffsetRange,
 	}
 )
 
@@ -121,6 +136,7 @@ func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2
 		}(c)
 	}
 	if !profile.ForbidRunWatchLoop {
+		revisionOffsetRange := profile.RevisionOffsetRange
 		for i := range profile.MemberClientCount {
 			wg.Add(1)
 			c, nerr := clientSet.NewClient([]string{endpoints[i%len(endpoints)]})
@@ -129,12 +145,13 @@ func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2
 				defer wg.Done()
 				defer c.Close()
 				traffic.RunWatchLoop(ctx, RunWatchLoopParam{
-					Client:     c,
-					QPSLimiter: limiter,
-					KeyStore:   keyStore,
-					Storage:    kubernetesStorage,
-					Finish:     finish,
-					Logger:     lg,
+					Client:              c,
+					QPSLimiter:          limiter,
+					KeyStore:            keyStore,
+					Storage:             kubernetesStorage,
+					Finish:              finish,
+					Logger:              lg,
+					RevisionOffsetRange: revisionOffsetRange,
 				})
 			}(c)
 		}
@@ -146,12 +163,13 @@ func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2
 				defer wg.Done()
 				defer c.Close()
 				traffic.RunWatchLoop(ctx, RunWatchLoopParam{
-					Client:     c,
-					QPSLimiter: limiter,
-					KeyStore:   keyStore,
-					Storage:    kubernetesStorage,
-					Finish:     finish,
-					Logger:     lg,
+					Client:              c,
+					QPSLimiter:          limiter,
+					KeyStore:            keyStore,
+					Storage:             kubernetesStorage,
+					Finish:              finish,
+					Logger:              lg,
+					RevisionOffsetRange: revisionOffsetRange,
 				})
 			}(c)
 		}
@@ -337,6 +355,7 @@ type Profile struct {
 	ForbidCompaction               bool
 	CompactPeriod                  time.Duration
 	ForbidRunWatchLoop             bool
+	RevisionOffsetRange            Range
 }
 
 func (p Profile) WithoutCompaction() Profile {
@@ -351,6 +370,11 @@ func (p Profile) WithCompactionPeriod(cp time.Duration) Profile {
 
 func (p Profile) WithoutWatchLoop() Profile {
 	p.ForbidRunWatchLoop = true
+	return p
+}
+
+func (p Profile) WithRevisionOffsetRange(min, max int64) Profile {
+	p.RevisionOffsetRange = Range{Min: min, Max: max}
 	return p
 }
 
@@ -375,10 +399,11 @@ type RunWatchLoopParam struct {
 	Client     *client.RecordingClient
 	QPSLimiter *rate.Limiter
 	// TODO: merge 2 key stores into 1
-	KeyStore *keyStore
-	Storage  *storage
-	Finish   <-chan struct{}
-	Logger   *zap.Logger
+	KeyStore            *keyStore
+	Storage             *storage
+	Finish              <-chan struct{}
+	Logger              *zap.Logger
+	RevisionOffsetRange Range
 }
 
 type Traffic interface {
@@ -415,7 +440,7 @@ func runWatch(ctx context.Context, p RunWatchLoopParam, cfg watchLoopConfig) err
 	if err != nil {
 		return err
 	}
-	rev := resp.Header.Revision + DefaultRevisionOffset
+	rev := resp.Header.Revision + p.RevisionOffsetRange.Rand()
 
 	watchCtx, watchCancel := context.WithTimeout(ctx, WatchTimeout)
 	defer watchCancel()

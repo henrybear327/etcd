@@ -38,8 +38,7 @@ import (
 )
 
 var (
-	DefaultWatchInterval  = 250 * time.Millisecond
-	DefaultRevisionOffset = int64(100)
+	DefaultWatchInterval = 250 * time.Millisecond
 
 	profile = traffic.Profile{
 		MinimalQPS:                     100,
@@ -48,6 +47,7 @@ var (
 		MemberClientCount:              3,
 		ClusterClientCount:             1,
 		MaxNonUniqueRequestConcurrency: 3,
+		RevisionOffsetRange:            traffic.DefaultRevisionOffsetRange,
 	}
 	trafficNames = []string{
 		"etcd",
@@ -183,6 +183,7 @@ func simulateTraffic(ctx context.Context, lg *zap.Logger, tf traffic.Traffic, ho
 		}(c)
 	}
 	if !profile.ForbidRunWatchLoop {
+		revisionOffsetRange := profile.RevisionOffsetRange
 		for i := range profile.MemberClientCount {
 			c := connect(clientSet, []string{hosts[i%len(hosts)]})
 			wg.Add(1)
@@ -190,12 +191,13 @@ func simulateTraffic(ctx context.Context, lg *zap.Logger, tf traffic.Traffic, ho
 				defer wg.Done()
 				defer c.Close()
 				tf.RunWatchLoop(ctx, traffic.RunWatchLoopParam{
-					Client:     c,
-					QPSLimiter: limiter,
-					KeyStore:   keyStore,
-					Storage:    kubernetesStorage,
-					Finish:     finish,
-					Logger:     lg,
+					Client:              c,
+					QPSLimiter:          limiter,
+					KeyStore:            keyStore,
+					Storage:             kubernetesStorage,
+					Finish:              finish,
+					Logger:              lg,
+					RevisionOffsetRange: revisionOffsetRange,
 				})
 			}(c)
 		}
@@ -206,12 +208,13 @@ func simulateTraffic(ctx context.Context, lg *zap.Logger, tf traffic.Traffic, ho
 				defer wg.Done()
 				defer c.Close()
 				tf.RunWatchLoop(ctx, traffic.RunWatchLoopParam{
-					Client:     c,
-					QPSLimiter: limiter,
-					KeyStore:   keyStore,
-					Storage:    kubernetesStorage,
-					Finish:     finish,
-					Logger:     lg,
+					Client:              c,
+					QPSLimiter:          limiter,
+					KeyStore:            keyStore,
+					Storage:             kubernetesStorage,
+					Finish:              finish,
+					Logger:              lg,
+					RevisionOffsetRange: revisionOffsetRange,
 				})
 			}(c)
 		}
