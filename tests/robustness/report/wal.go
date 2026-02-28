@@ -73,7 +73,7 @@ func PersistedRequests(lg *zap.Logger, dataDirs []string) ([]model.EtcdRequest, 
 		minCommitIndex = min(minCommitIndex, state.Commit)
 		entriesPersistedInWAL[i] = entries
 	}
-	entries, err := mergeMembersEntries(minCommitIndex, entriesPersistedInWAL)
+	entries, err := MergeMembersEntries(minCommitIndex, entriesPersistedInWAL)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func PersistedRequests(lg *zap.Logger, dataDirs []string) ([]model.EtcdRequest, 
 		if e.Type != raftpb.EntryNormal {
 			continue
 		}
-		request, err := parseEntryNormal(e)
+		request, err := ParseEntryNormal(e)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +93,7 @@ func PersistedRequests(lg *zap.Logger, dataDirs []string) ([]model.EtcdRequest, 
 	return persistedRequests, nil
 }
 
-func mergeMembersEntries(minCommitIndex uint64, memberEntries [][]raftpb.Entry) ([]raftpb.Entry, error) {
+func MergeMembersEntries(minCommitIndex uint64, memberEntries [][]raftpb.Entry) ([]raftpb.Entry, error) {
 	for _, entries := range memberEntries {
 		var lastIndex uint64
 		for _, e := range entries {
@@ -210,7 +210,7 @@ func ReadWAL(lg *zap.Logger, dataDir string) (state raftpb.HardState, ents []raf
 	}
 }
 
-func parseEntryNormal(ent raftpb.Entry) (*model.EtcdRequest, error) {
+func ParseEntryNormal(ent raftpb.Entry) (*model.EtcdRequest, error) {
 	var raftReq pb.InternalRaftRequest
 	if len(ent.Data) == 0 {
 		return nil, nil
@@ -300,10 +300,10 @@ func parseEntryNormal(ent raftpb.Entry) (*model.EtcdRequest, error) {
 			}
 		}
 		for _, op := range raftReq.Txn.Success {
-			txn.OperationsOnSuccess = append(txn.OperationsOnSuccess, toEtcdOperation(op))
+			txn.OperationsOnSuccess = append(txn.OperationsOnSuccess, ToEtcdOperation(op))
 		}
 		for _, op := range raftReq.Txn.Failure {
-			txn.OperationsOnFailure = append(txn.OperationsOnFailure, toEtcdOperation(op))
+			txn.OperationsOnFailure = append(txn.OperationsOnFailure, ToEtcdOperation(op))
 		}
 		request := model.EtcdRequest{
 			Type: model.Txn,
@@ -315,7 +315,7 @@ func parseEntryNormal(ent raftpb.Entry) (*model.EtcdRequest, error) {
 	}
 }
 
-func toEtcdOperation(op *pb.RequestOp) (operation model.EtcdOperation) {
+func ToEtcdOperation(op *pb.RequestOp) (operation model.EtcdOperation) {
 	switch {
 	case op.GetRequestRange() != nil:
 		rangeOp := op.GetRequestRange()

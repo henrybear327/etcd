@@ -355,7 +355,7 @@ func TestMergeMemberEntries(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			entries, err := mergeMembersEntries(tc.minCommitIndex, tc.memberEntries)
+			entries, err := MergeMembersEntries(tc.minCommitIndex, tc.memberEntries)
 			if tc.expectErr == "" {
 				require.NoError(t, err)
 			} else {

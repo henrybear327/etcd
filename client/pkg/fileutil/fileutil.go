@@ -44,6 +44,22 @@ func IsDirWriteable(dir string) error {
 	return os.Remove(f)
 }
 
+// SyncDir fsyncs the directory to persist its entries (file/directory names).
+// This is required on POSIX systems to ensure that newly created entries
+// within the directory survive a crash.
+func SyncDir(dir string) error {
+	f, err := OpenDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to open directory %q for syncing: %w", dir, err)
+	}
+	err = Fsync(f)
+	closeErr := f.Close()
+	if err != nil {
+		return fmt.Errorf("failed to fsync directory %q: %w", dir, err)
+	}
+	return closeErr
+}
+
 // TouchDirAll is similar to os.MkdirAll. It creates directories with 0700 permission if any directory
 // does not exists. TouchDirAll also ensures the given directory is writable.
 func TouchDirAll(lg *zap.Logger, dir string) error {
@@ -60,6 +76,13 @@ func TouchDirAll(lg *zap.Logger, dir string) error {
 		if err != nil {
 			// if mkdirAll("a/text") and "text" is not
 			// a directory, this will return syscall.ENOTDIR
+			return err
+		}
+		// Fsync the parent directory to persist the new directory entry.
+		// Without this, the new directory may not survive a crash on
+		// POSIX-compliant filesystems (the entry exists only in the
+		// parent directory's in-memory state until fsynced).
+		if err := SyncDir(filepath.Dir(dir)); err != nil {
 			return err
 		}
 	}

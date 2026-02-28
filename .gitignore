@@ -35,3 +35,6 @@ hack/tls-setup/certs
 /tools/benchmark/benchmark
 /out
 /etcd-dump-logs
+.claude
+.worktree
+.gosim/
