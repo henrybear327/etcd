@@ -44,6 +44,22 @@ func IsDirWriteable(dir string) error {
 	return os.Remove(f)
 }
 
+// SyncDir fsyncs the directory to persist its entries (file/directory names).
+// This is required on POSIX systems to ensure that newly created entries
+// within the directory survive a crash.
+func SyncDir(dir string) error {
+	f, err := OpenDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to open directory %q for syncing: %w", dir, err)
+	}
+	err = Fsync(f)
+	closeErr := f.Close()
+	if err != nil {
+		return fmt.Errorf("failed to fsync directory %q: %w", dir, err)
+	}
+	return closeErr
+}
+
 // TouchDirAll is similar to os.MkdirAll. It creates directories with 0700 permission if any directory
 // does not exists. TouchDirAll also ensures the given directory is writable.
 func TouchDirAll(lg *zap.Logger, dir string) error {
@@ -56,11 +72,30 @@ func TouchDirAll(lg *zap.Logger, dir string) error {
 			lg.Warn("check file permission", zap.Error(err))
 		}
 	} else {
+		// Find the deepest existing ancestor before creating directories.
+		// We need to fsync every parent from this ancestor down to persist
+		// all new directory entries on POSIX-compliant filesystems.
+		existingAncestor := dir
+		for !Exist(existingAncestor) {
+			existingAncestor = filepath.Dir(existingAncestor)
+		}
+
 		err := os.MkdirAll(dir, PrivateDirMode)
 		if err != nil {
 			// if mkdirAll("a/text") and "text" is not
 			// a directory, this will return syscall.ENOTDIR
 			return err
+		}
+
+		// Fsync from the existing ancestor (which holds the first new
+		// entry) down through all newly created intermediate directories.
+		// Without this, newly created entries may not survive a crash —
+		// they exist only in in-memory parent directory metadata until
+		// each parent is fsynced.
+		for d := dir; d != existingAncestor; d = filepath.Dir(d) {
+			if err := SyncDir(filepath.Dir(d)); err != nil {
+				return err
+			}
 		}
 	}
 

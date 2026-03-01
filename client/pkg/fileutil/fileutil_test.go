@@ -184,3 +184,31 @@ func TestTouchDirAll(t *testing.T) {
 
 	assert.NoError(t, TouchDirAll(zaptest.NewLogger(t), tmpdir))
 }
+
+func TestTouchDirAllMultiLevel(t *testing.T) {
+	tmpdir := t.TempDir()
+	lg := zaptest.NewLogger(t)
+
+	// Create a deep path where multiple intermediate directories don't exist.
+	// This mimics the snapshot restore path (dataDir/member/snap).
+	deepDir := filepath.Join(tmpdir, "a", "b", "c")
+	require.NoError(t, TouchDirAll(lg, deepDir))
+
+	// Verify all intermediate directories were created.
+	require.True(t, Exist(filepath.Join(tmpdir, "a")))
+	require.True(t, Exist(filepath.Join(tmpdir, "a", "b")))
+	require.True(t, Exist(filepath.Join(tmpdir, "a", "b", "c")))
+
+	// Calling again on an existing directory should be a no-op.
+	require.NoError(t, TouchDirAll(lg, deepDir))
+}
+
+func TestSyncDir(t *testing.T) {
+	tmpdir := t.TempDir()
+
+	// SyncDir on an existing directory should succeed.
+	require.NoError(t, SyncDir(tmpdir))
+
+	// SyncDir on a non-existent directory should fail.
+	require.Error(t, SyncDir(filepath.Join(tmpdir, "nonexistent")))
+}
