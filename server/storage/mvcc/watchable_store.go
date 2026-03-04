@@ -15,6 +15,7 @@
 package mvcc
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -422,12 +423,12 @@ func rangeEventsWithReuse(lg *zap.Logger, b backend.Backend, evs []mvccpb.Event,
 	if evs[0].Kv.ModRevision > minRev {
 		evs = append(rangeEvents(lg, b, minRev, evs[0].Kv.ModRevision), evs...)
 	}
-	// cut from left
+	// cut from left - slices.Delete shifts elements left and zeros the freed tail
 	prefixIndex := 0
 	for prefixIndex < len(evs) && evs[prefixIndex].Kv.ModRevision < minRev {
 		prefixIndex++
 	}
-	evs = evs[prefixIndex:]
+	evs = slices.Delete(evs, 0, prefixIndex)
 
 	if len(evs) == 0 {
 		return rangeEvents(lg, b, minRev, maxRev)
@@ -436,12 +437,14 @@ func rangeEventsWithReuse(lg *zap.Logger, b backend.Backend, evs []mvccpb.Event,
 	if evs[len(evs)-1].Kv.ModRevision+1 < maxRev {
 		evs = append(evs, rangeEvents(lg, b, evs[len(evs)-1].Kv.ModRevision+1, maxRev)...)
 	}
-	// cut from right
+	// cut from right - clear freed elements so GC can reclaim Kv/PrevKv pointers
 	suffixIndex := len(evs) - 1
 	for suffixIndex >= 0 && evs[suffixIndex].Kv.ModRevision >= maxRev {
 		suffixIndex--
 	}
-	evs = evs[:suffixIndex+1]
+	newLen := suffixIndex + 1
+	clear(evs[newLen:])
+	evs = evs[:newLen]
 	return evs
 }
 
