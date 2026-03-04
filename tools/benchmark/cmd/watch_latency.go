@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
@@ -46,6 +47,12 @@ var (
 	watchLStreams           int
 	watchLWatchersPerStream int
 	watchLPrevKV            bool
+	watchLReconnectInterval time.Duration
+	watchLWatchFromRev      int64
+
+	watchLBgKeyCount     int
+	watchLBgKeySize      int
+	watchLReconnectSleep time.Duration
 )
 
 func init() {
@@ -58,12 +65,26 @@ func init() {
 	watchLatencyCmd.Flags().IntVar(&watchLPutRate, "put-rate", 100, "Number of keys to put per second")
 	watchLatencyCmd.Flags().IntVar(&watchLKeySize, "key-size", 32, "Key size of watch response")
 	watchLatencyCmd.Flags().IntVar(&watchLValueSize, "val-size", 32, "Value size of watch response")
+	watchLatencyCmd.Flags().DurationVar(&watchLReconnectInterval, "reconnect-interval", 0, "How often each watcher reconnects (0 = disabled)")
+	watchLatencyCmd.Flags().Int64Var(&watchLWatchFromRev, "watch-from-rev", 0, "Starting revision for watchers (0 = current)")
+
+	watchLatencyCmd.Flags().IntVar(&watchLBgKeyCount, "bg-key-count", 0, "Number of background keys to pre-populate (0 = disabled)")
+	watchLatencyCmd.Flags().IntVar(&watchLBgKeySize, "bg-key-size", 102400, "Size in bytes of each background key's value")
+	watchLatencyCmd.Flags().DurationVar(&watchLReconnectSleep, "reconnect-sleep", 0, "Sleep duration between disconnect and reconnect (0 = immediate)")
 }
 
 func watchLatencyFunc(cmd *cobra.Command, _ []string) {
 	key := string(mustRandBytes(watchLKeySize))
 	value := string(mustRandBytes(watchLValueSize))
-	wchs := setupWatchChannels(key)
+
+	// Pre-populate background data if requested
+	if watchLBgKeyCount > 0 {
+		bgClient := mustCreateConn()
+		prePopulateBackground(bgClient)
+		bgClient.Close()
+	}
+
+	wchs, streams := setupWatchChannels(key)
 	putClient := mustCreateConn()
 
 	bar = pb.New(watchLPutTotal * len(wchs))
@@ -74,16 +95,98 @@ func watchLatencyFunc(cmd *cobra.Command, _ []string) {
 	putTimes := make([]time.Time, watchLPutTotal)
 	eventTimes := make([][]time.Time, len(wchs))
 
+	// Channel to collect reconnect latency results
+	var reconnectResults []report.Result
+	var reconnectMu sync.Mutex
+
 	for i, wch := range wchs {
 		eventTimes[i] = make([]time.Time, watchLPutTotal)
+		stream := streams[i/watchLWatchersPerStream]
 		wg.Go(func() {
 			eventCount := 0
+			ch := wch
+			var lastSeenRev int64
+			var reconnectTimer *time.Timer
+			if watchLReconnectInterval > 0 {
+				reconnectTimer = time.NewTimer(watchLReconnectInterval)
+				defer reconnectTimer.Stop()
+			}
+
 			for eventCount < watchLPutTotal {
-				resp := <-wch
-				for range resp.Events {
-					eventTimes[i][eventCount] = time.Now()
-					eventCount++
-					bar.Increment()
+				if reconnectTimer != nil {
+					select {
+					case resp, ok := <-ch:
+						if !ok {
+							continue
+						}
+						for _, ev := range resp.Events {
+							if ev.Kv != nil {
+								rev := ev.Kv.ModRevision
+								if rev <= lastSeenRev {
+									continue // skip replayed events
+								}
+								lastSeenRev = rev
+							}
+							if eventCount < watchLPutTotal {
+								eventTimes[i][eventCount] = time.Now()
+								eventCount++
+								bar.Increment()
+							}
+						}
+					case <-reconnectTimer.C:
+						// Sleep before reconnecting to let revisions accumulate
+						if watchLReconnectSleep > 0 {
+							time.Sleep(watchLReconnectSleep)
+						}
+						reconnStart := time.Now()
+
+						rev := lastSeenRev + 1
+						if watchLWatchFromRev > 0 {
+							rev = watchLWatchFromRev
+						}
+						opts := []clientv3.OpOption{clientv3.WithRev(rev)}
+						if watchLPrevKV {
+							opts = append(opts, clientv3.WithPrevKV())
+						}
+
+						ch = stream.Watch(context.TODO(), key, opts...)
+
+						// Measure time to first event after reconnect
+						if watchLReconnectSleep > 0 {
+							select {
+							case resp, ok := <-ch:
+								if ok && len(resp.Events) > 0 {
+									reconnEnd := time.Now()
+									reconnectMu.Lock()
+									reconnectResults = append(reconnectResults, report.Result{Start: reconnStart, End: reconnEnd})
+									reconnectMu.Unlock()
+									for _, ev := range resp.Events {
+										if ev.Kv != nil {
+											rev := ev.Kv.ModRevision
+											if rev <= lastSeenRev {
+												continue
+											}
+											lastSeenRev = rev
+										}
+										if eventCount < watchLPutTotal {
+											eventTimes[i][eventCount] = time.Now()
+											eventCount++
+											bar.Increment()
+										}
+									}
+								}
+							}
+						}
+
+						reconnectTimer.Reset(watchLReconnectInterval)
+					}
+				} else {
+					resp := <-ch
+					for range resp.Events {
+						eventTimes[i][eventCount] = time.Now()
+						eventCount++
+						bar.Increment()
+					}
 				}
 			}
 		})
@@ -125,9 +228,20 @@ func watchLatencyFunc(cmd *cobra.Command, _ []string) {
 
 	close(watchReport.Results())
 	fmt.Printf("\nWatch events summary:\n%s", <-watchReportResults)
+
+	// Print reconnect latency report if we have results
+	if len(reconnectResults) > 0 {
+		reconnReport := newReport(cmd.Name() + "-reconnect")
+		reconnReportResults := reconnReport.Run()
+		for _, r := range reconnectResults {
+			reconnReport.Results() <- r
+		}
+		close(reconnReport.Results())
+		fmt.Printf("\nReconnect summary:\n%s", <-reconnReportResults)
+	}
 }
 
-func setupWatchChannels(key string) []clientv3.WatchChan {
+func setupWatchChannels(key string) ([]clientv3.WatchChan, []clientv3.Watcher) {
 	clients := mustCreateClients(totalClients, totalConns)
 
 	streams := make([]clientv3.Watcher, watchLStreams)
@@ -138,11 +252,31 @@ func setupWatchChannels(key string) []clientv3.WatchChan {
 	if watchLPrevKV {
 		opts = append(opts, clientv3.WithPrevKV())
 	}
+	if watchLWatchFromRev > 0 {
+		opts = append(opts, clientv3.WithRev(watchLWatchFromRev))
+	}
+
 	wchs := make([]clientv3.WatchChan, len(streams)*watchLWatchersPerStream)
 	for i := 0; i < len(streams); i++ {
 		for j := 0; j < watchLWatchersPerStream; j++ {
 			wchs[i*watchLWatchersPerStream+j] = streams[i].Watch(context.TODO(), key, opts...)
 		}
 	}
-	return wchs
+	return wchs, streams
+}
+
+func prePopulateBackground(client *clientv3.Client) {
+	fmt.Printf("Pre-populating %d background keys (%d bytes each)...\n", watchLBgKeyCount, watchLBgKeySize)
+	bgValue := string(mustRandBytes(watchLBgKeySize))
+	for i := 0; i < watchLBgKeyCount; i++ {
+		key := fmt.Sprintf("watchlatbg-%d", i)
+		if _, err := client.Put(context.TODO(), key, bgValue); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to pre-populate background key %s: %v\n", key, err)
+			os.Exit(1)
+		}
+		if (i+1)%100 == 0 {
+			fmt.Printf("  ...populated %d/%d background keys\n", i+1, watchLBgKeyCount)
+		}
+	}
+	fmt.Println("Background pre-population complete.")
 }
