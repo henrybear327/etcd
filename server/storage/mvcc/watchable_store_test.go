@@ -441,6 +441,178 @@ func TestRangeEvents(t *testing.T) {
 	}
 }
 
+func TestRangeEventsWithReuseBranches(t *testing.T) {
+	b, _ := betesting.NewDefaultTmpBackend(t)
+	lg := zaptest.NewLogger(t)
+	s := NewStore(lg, b, &lease.FakeLessor{}, StoreConfig{})
+	defer cleanup(s, b)
+
+	foo1 := []byte("foo1")
+	foo2 := []byte("foo2")
+	foo3 := []byte("foo3")
+	value := []byte("bar")
+	s.Put(foo1, value, lease.NoLease) // rev 2
+	s.Put(foo2, value, lease.NoLease) // rev 3
+	s.Put(foo3, value, lease.NoLease) // rev 4
+	s.DeleteRange(foo1, foo3)         // rev 5: deletes foo1 and foo2 → 2 events
+
+	// All 5 events in the DB: rev2, rev3, rev4, rev5(foo1), rev5(foo2)
+	allEvents := rangeEvents(lg, b, 2, 6)
+	require.Len(t, allEvents, 5)
+
+	rev2 := allEvents[0]   // foo1 PUT, ModRevision=2
+	rev3 := allEvents[1]   // foo2 PUT, ModRevision=3
+	rev4 := allEvents[2]   // foo3 PUT, ModRevision=4
+	rev5a := allEvents[3]  // foo1 DELETE, ModRevision=5
+	rev5b := allEvents[4]  // foo2 DELETE, ModRevision=5
+
+	copyEvents := func(evs []mvccpb.Event) []mvccpb.Event {
+		if evs == nil {
+			return nil
+		}
+		out := make([]mvccpb.Event, len(evs))
+		for i, ev := range evs {
+			out[i] = ev
+			if ev.Kv != nil {
+				kv := *ev.Kv
+				out[i].Kv = &kv
+			}
+		}
+		return out
+	}
+
+	tcs := []struct {
+		name         string
+		inputEvs     []mvccpb.Event
+		minRev       int64
+		maxRev       int64
+		expectEvents []mvccpb.Event
+	}{
+		{
+			name:         "nil evs",
+			inputEvs:     nil,
+			minRev:       2,
+			maxRev:       6,
+			expectEvents: allEvents,
+		},
+		{
+			name:         "empty evs",
+			inputEvs:     []mvccpb.Event{},
+			minRev:       3,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev3, rev4},
+		},
+		{
+			name:         "left append with data",
+			inputEvs:     []mvccpb.Event{rev5a, rev5b},
+			minRev:       2,
+			maxRev:       6,
+			expectEvents: allEvents,
+		},
+		{
+			name:         "no left append or cut",
+			inputEvs:     []mvccpb.Event{rev2, rev3},
+			minRev:       2,
+			maxRev:       4,
+			expectEvents: []mvccpb.Event{rev2, rev3},
+		},
+		{
+			name:         "left cut some",
+			inputEvs:     []mvccpb.Event{rev2, rev3, rev4},
+			minRev:       3,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev3, rev4},
+		},
+		{
+			name:         "left cut all then fallback",
+			inputEvs:     []mvccpb.Event{rev2},
+			minRev:       5,
+			maxRev:       6,
+			expectEvents: []mvccpb.Event{rev5a, rev5b},
+		},
+		{
+			name:         "right append",
+			inputEvs:     []mvccpb.Event{rev2, rev3},
+			minRev:       2,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev2, rev3, rev4},
+		},
+		{
+			name:         "no right append",
+			inputEvs:     []mvccpb.Event{rev2, rev3, rev4},
+			minRev:       2,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev2, rev3, rev4},
+		},
+		{
+			name:         "right trim evs",
+			inputEvs:     []mvccpb.Event{rev2, rev3, rev4, rev5a, rev5b},
+			minRev:       2,
+			maxRev:       4,
+			expectEvents: []mvccpb.Event{rev2, rev3},
+		},
+		{
+			name:         "right trim all original",
+			inputEvs:     []mvccpb.Event{rev5a, rev5b},
+			minRev:       2,
+			maxRev:       4,
+			expectEvents: []mvccpb.Event{rev2, rev3},
+		},
+		{
+			name:         "both left and right append",
+			inputEvs:     []mvccpb.Event{rev3},
+			minRev:       2,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev2, rev3, rev4},
+		},
+		{
+			name:         "both left cut and right trim",
+			inputEvs:     []mvccpb.Event{rev2, rev3, rev4, rev5a, rev5b},
+			minRev:       3,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev3, rev4},
+		},
+		{
+			name:         "single elem exact match",
+			inputEvs:     []mvccpb.Event{rev3},
+			minRev:       3,
+			maxRev:       4,
+			expectEvents: []mvccpb.Event{rev3},
+		},
+		{
+			name:         "single elem left append",
+			inputEvs:     []mvccpb.Event{rev3},
+			minRev:       2,
+			maxRev:       4,
+			expectEvents: []mvccpb.Event{rev2, rev3},
+		},
+		{
+			name:         "single elem right append",
+			inputEvs:     []mvccpb.Event{rev3},
+			minRev:       3,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev3, rev4},
+		},
+		{
+			name:         "left append and right trim",
+			inputEvs:     []mvccpb.Event{rev5a, rev5b},
+			minRev:       3,
+			maxRev:       5,
+			expectEvents: []mvccpb.Event{rev3, rev4},
+		},
+	}
+	// B10 (right trim of tmp) is unreachable: rangeEvents(start, maxRev) returns
+	// events in [start, maxRev), so tmp never contains events with ModRevision >= maxRev.
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evs := copyEvents(tc.inputEvs)
+			got := rangeEventsWithReuse(lg, b, evs, tc.minRev, tc.maxRev)
+			assert.Equal(t, tc.expectEvents, got)
+		})
+	}
+}
+
 // TestWatchCompacted tests a watcher that watches on a compacted revision.
 func TestWatchCompacted(t *testing.T) {
 	b, _ := betesting.NewDefaultTmpBackend(t)

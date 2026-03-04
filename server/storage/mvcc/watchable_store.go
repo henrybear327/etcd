@@ -433,18 +433,31 @@ func rangeEventsWithReuse(lg *zap.Logger, b backend.Backend, evs []mvccpb.Event,
 	if len(evs) == 0 {
 		return rangeEvents(lg, b, minRev, maxRev)
 	}
+
 	// append from right
+	var tmp []mvccpb.Event
 	if evs[len(evs)-1].Kv.ModRevision+1 < maxRev {
-		evs = append(evs, rangeEvents(lg, b, evs[len(evs)-1].Kv.ModRevision+1, maxRev)...)
+		tmp = rangeEvents(lg, b, evs[len(evs)-1].Kv.ModRevision+1, maxRev)
 	}
-	// cut from right - clear freed elements so GC can reclaim Kv/PrevKv pointers
-	suffixIndex := len(evs) - 1
-	for suffixIndex >= 0 && evs[suffixIndex].Kv.ModRevision >= maxRev {
-		suffixIndex--
+
+	// cut from right of tmp (trim before appending)
+	tmpLen := len(tmp)
+	for tmpLen > 0 && tmp[tmpLen-1].Kv.ModRevision >= maxRev {
+		tmpLen--
 	}
-	newLen := suffixIndex + 1
+	clear(tmp[tmpLen:])
+	tmp = tmp[:tmpLen]
+
+	// cut from right of evs - clear freed elements so GC can reclaim Kv/PrevKv pointers
+	newLen := len(evs)
+	for newLen > 0 && evs[newLen-1].Kv.ModRevision >= maxRev {
+		newLen--
+	}
 	clear(evs[newLen:])
 	evs = evs[:newLen]
+
+	// only append the needed portion from tmp
+	evs = append(evs, tmp...)
 	return evs
 }
 
