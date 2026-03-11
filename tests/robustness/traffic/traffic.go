@@ -16,6 +16,8 @@ package traffic
 
 import (
 	"context"
+	"math/rand"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -108,6 +110,14 @@ func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2
 			defer wg.Done()
 			defer c.Close()
 
+			if profile.EndpointSwitchPeriod > 0 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					runEndpointSwitchLoop(ctx, c, endpoints, profile.EndpointSwitchPeriod, finish)
+				}()
+			}
+
 			traffic.RunKeyValueLoop(ctx, RunTrafficLoopParam{
 				Client:                             c,
 				QPSLimiter:                         limiter,
@@ -145,6 +155,15 @@ func SimulateTraffic(ctx context.Context, t *testing.T, lg *zap.Logger, clus *e2
 			go func(c *client.RecordingClient) {
 				defer wg.Done()
 				defer c.Close()
+
+				if profile.EndpointSwitchPeriod > 0 {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						runEndpointSwitchLoop(ctx, c, endpoints, profile.EndpointSwitchPeriod, finish)
+					}()
+				}
+
 				traffic.RunWatchLoop(ctx, RunWatchLoopParam{
 					Client:     c,
 					QPSLimiter: limiter,
@@ -337,6 +356,7 @@ type Profile struct {
 	ForbidCompaction               bool
 	CompactPeriod                  time.Duration
 	ForbidRunWatchLoop             bool
+	EndpointSwitchPeriod           time.Duration
 }
 
 func (p Profile) WithoutCompaction() Profile {
@@ -351,6 +371,11 @@ func (p Profile) WithCompactionPeriod(cp time.Duration) Profile {
 
 func (p Profile) WithoutWatchLoop() Profile {
 	p.ForbidRunWatchLoop = true
+	return p
+}
+
+func (p Profile) WithEndpointSwitchPeriod(esp time.Duration) Profile {
+	p.EndpointSwitchPeriod = esp
 	return p
 }
 
@@ -463,4 +488,21 @@ func CheckEmptyDatabaseAtStart(ctx context.Context, lg *zap.Logger, endpoints []
 		break
 	}
 	return nil
+}
+
+func runEndpointSwitchLoop(ctx context.Context, c *client.RecordingClient, endpoints []string, period time.Duration, finish <-chan struct{}) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-finish:
+			return
+		case <-time.After(period + time.Duration(rand.Int63n(int64(period)))):
+			shuffledEndpoints := slices.Clone(endpoints)
+			rand.Shuffle(len(shuffledEndpoints), func(i, j int) {
+				shuffledEndpoints[i], shuffledEndpoints[j] = shuffledEndpoints[j], shuffledEndpoints[i]
+			})
+			c.SetEndpoints(shuffledEndpoints...)
+		}
+	}
 }
