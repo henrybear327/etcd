@@ -88,27 +88,42 @@ func TestRobustnessRegression(t *testing.T) {
 }
 
 func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s scenarios.TestScenario, c *e2e.EtcdProcessCluster) {
-	serverDataPaths := report.ServerDataPaths(c)
 	r := report.TestReport{
 		Logger:          lg,
-		ServersDataPath: serverDataPaths,
+		ServersDataPath: report.ServerDataPaths(c),
 		Traffic:         &report.TrafficDetail{ExpectUniqueRevision: s.Traffic.ExpectUniqueRevision()},
 	}
+	reportPath := testResultsDirectory(t)
+	reportDataSaved := false
 	// t.Failed() returns false during panicking. We need to forcibly
 	// save data on panicking.
 	// Refer to: https://github.com/golang/go/issues/49929
 	panicked := true
 	defer func() {
-		_, persistResults := os.LookupEnv("PERSIST_RESULTS")
-		shouldReport := t.Failed() || panicked || persistResults
-		if shouldReport {
-			path := testResultsDirectory(t)
-			if err := r.Report(path); err != nil {
+		if !shouldKeepReport(t, panicked) {
+			if reportDataSaved {
+				lg.Info("Removing robustness test report", zap.String("path", reportPath))
+				if err := os.RemoveAll(reportPath); err != nil {
+					t.Error(err)
+				}
+			}
+			return
+		}
+
+		lg.Info("Keeping robustness test report", zap.String("path", reportPath))
+		if reportDataSaved {
+			lg.Info("Adding visualization to test report", zap.String("path", reportPath))
+			if err := r.ReportVisualization(reportPath); err != nil {
 				t.Error(err)
 			}
 		}
 	}()
 	r.Client = runScenario(ctx, t, s, lg, c)
+	if err := r.ReportData(reportPath); err != nil {
+		t.Error(err)
+	} else {
+		reportDataSaved = true
+	}
 	persistedRequests, err := report.PersistedRequestsCluster(lg, c)
 	if err != nil {
 		t.Error(err)
@@ -122,6 +137,11 @@ func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s scenari
 		t.Error(err)
 	}
 	panicked = false
+}
+
+func shouldKeepReport(t *testing.T, panicked bool) bool {
+	_, persistResults := os.LookupEnv("PERSIST_RESULTS")
+	return t.Failed() || panicked || persistResults
 }
 
 func runScenario(ctx context.Context, t *testing.T, s scenarios.TestScenario, lg *zap.Logger, clus *e2e.EtcdProcessCluster) (reports []report.ClientReport) {

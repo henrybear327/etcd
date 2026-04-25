@@ -35,7 +35,7 @@ type TestReport struct {
 	Traffic         *TrafficDetail
 }
 
-func (r *TestReport) Report(path string) error {
+func (r *TestReport) ReportData(path string) error {
 	r.Logger.Info("Saving robustness test report", zap.String("path", path))
 	err := os.RemoveAll(path)
 	if err != nil {
@@ -58,12 +58,14 @@ func (r *TestReport) Report(path string) error {
 			return err
 		}
 	}
-	if r.Visualize != nil {
-		if err := r.Visualize(r.Logger, filepath.Join(path, "history.html")); err != nil {
-			return err
-		}
-	}
 	return nil
+}
+
+func (r *TestReport) ReportVisualization(path string) error {
+	if r.Visualize == nil {
+		return nil
+	}
+	return r.Visualize(r.Logger, filepath.Join(path, "history.html"))
 }
 
 func ServerDataPaths(c *e2e.EtcdProcessCluster) map[string]string {

@@ -78,8 +78,11 @@ func main() {
 	lg.Info("Traffic", zap.String("Type", trafficNames[choice]))
 	r := report.TestReport{Logger: lg, ServersDataPath: etcdetcdDataPaths, Traffic: &report.TrafficDetail{ExpectUniqueRevision: tf.ExpectUniqueRevision()}}
 	defer func() {
-		if err = r.Report(reportPath); err != nil {
+		if err = r.ReportData(reportPath); err != nil {
 			lg.Error("Failed to save traffic generation report", zap.Error(err))
+		}
+		if err = r.ReportVisualization(reportPath); err != nil {
+			lg.Error("Failed to save traffic generation visualization", zap.Error(err))
 		}
 	}()
 
