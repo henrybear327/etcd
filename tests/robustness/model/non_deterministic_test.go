@@ -15,6 +15,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -347,6 +348,31 @@ func TestModelNonDeterministic(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestModelNonDeterministicStepContextCancellation(t *testing.T) {
+	model := NonDeterministicModel([]string{"key"})
+	state := model.Init()
+	request := putRequest("key", "1")
+	response := failedResponse(errors.New("failed"))
+
+	ok, nextState := model.StepContext(context.Background(), state, request, response)
+	if !ok {
+		t.Fatal("expected uncanceled context to allow state expansion")
+	}
+	if got := len(nextState.(nonDeterministicState)); got != 2 {
+		t.Fatalf("expected failed request to expand into 2 states, got %d", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ok, nextState = model.StepContext(ctx, state, request, response)
+	if ok {
+		t.Fatal("expected canceled context to stop state expansion")
+	}
+	if got := len(nextState.(nonDeterministicState)); got != 0 {
+		t.Fatalf("expected canceled context to return no states, got %d", got)
 	}
 }
 

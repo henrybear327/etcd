@@ -16,6 +16,7 @@ package model
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -34,6 +35,9 @@ var NonDeterministicModel = func(keys []string) porcupine.Model {
 		},
 		Step: func(st any, in any, out any) (bool, any) {
 			return st.(nonDeterministicState).apply(in.(EtcdRequest), out.(MaybeEtcdResponse))
+		},
+		StepContext: func(ctx context.Context, st any, in any, out any) (bool, any) {
+			return st.(nonDeterministicState).applyContext(ctx, in.(EtcdRequest), out.(MaybeEtcdResponse))
 		},
 		Equal: func(st1, st2 any) bool {
 			return st1.(nonDeterministicState).Equal(st2.(nonDeterministicState))
@@ -146,24 +150,41 @@ func compareStates(first, second EtcdState) int {
 }
 
 func (states nonDeterministicState) apply(request EtcdRequest, response MaybeEtcdResponse) (bool, nonDeterministicState) {
+	return states.applyContext(context.Background(), request, response)
+}
+
+func (states nonDeterministicState) applyContext(ctx context.Context, request EtcdRequest, response MaybeEtcdResponse) (bool, nonDeterministicState) {
+	if ctx.Err() != nil {
+		return false, nil
+	}
 	var newStates nonDeterministicState
 	switch {
 	case response.Error != "":
-		newStates = states.applyFailedRequest(request)
+		newStates = states.applyFailedRequestContext(ctx, request)
 	case response.Persisted && response.PersistedRevision == 0:
-		newStates = states.applyPersistedRequest(request)
+		newStates = states.applyPersistedRequestContext(ctx, request)
 	case response.Persisted && response.PersistedRevision != 0:
-		newStates = states.applyPersistedRequestWithRevision(request, response.PersistedRevision)
+		newStates = states.applyPersistedRequestWithRevisionContext(ctx, request, response.PersistedRevision)
 	default:
-		newStates = states.applyRequestWithResponse(request, response.EtcdResponse)
+		newStates = states.applyRequestWithResponseContext(ctx, request, response.EtcdResponse)
+	}
+	if ctx.Err() != nil {
+		return false, nil
 	}
 	return len(newStates) > 0, newStates
 }
 
 // applyFailedRequest returns both the original states and states with applied request. It considers both cases, request was persisted and request was lost.
 func (states nonDeterministicState) applyFailedRequest(request EtcdRequest) nonDeterministicState {
+	return states.applyFailedRequestContext(context.Background(), request)
+}
+
+func (states nonDeterministicState) applyFailedRequestContext(ctx context.Context, request EtcdRequest) nonDeterministicState {
 	newStates := make(nonDeterministicState, 0, len(states)*2)
 	for _, s := range states {
+		if ctx.Err() != nil {
+			return nil
+		}
 		newStates = append(newStates, s)
 		newState, _ := s.Step(request)
 		if !newState.Equal(s) {
@@ -175,8 +196,15 @@ func (states nonDeterministicState) applyFailedRequest(request EtcdRequest) nonD
 
 // applyPersistedRequest applies request to all possible states.
 func (states nonDeterministicState) applyPersistedRequest(request EtcdRequest) nonDeterministicState {
+	return states.applyPersistedRequestContext(context.Background(), request)
+}
+
+func (states nonDeterministicState) applyPersistedRequestContext(ctx context.Context, request EtcdRequest) nonDeterministicState {
 	newStates := make(nonDeterministicState, 0, len(states))
 	for _, s := range states {
+		if ctx.Err() != nil {
+			return nil
+		}
 		newState, _ := s.Step(request)
 		newStates = append(newStates, newState)
 	}
@@ -185,8 +213,15 @@ func (states nonDeterministicState) applyPersistedRequest(request EtcdRequest) n
 
 // applyPersistedRequestWithRevision applies request to all possible states, but leaves only states that would return proper revision.
 func (states nonDeterministicState) applyPersistedRequestWithRevision(request EtcdRequest, responseRevision int64) nonDeterministicState {
+	return states.applyPersistedRequestWithRevisionContext(context.Background(), request, responseRevision)
+}
+
+func (states nonDeterministicState) applyPersistedRequestWithRevisionContext(ctx context.Context, request EtcdRequest, responseRevision int64) nonDeterministicState {
 	newStates := make(nonDeterministicState, 0, len(states))
 	for _, s := range states {
+		if ctx.Err() != nil {
+			return nil
+		}
 		newState, modelResponse := s.Step(request)
 		if modelResponse.Revision == responseRevision {
 			newStates = append(newStates, newState)
@@ -197,8 +232,15 @@ func (states nonDeterministicState) applyPersistedRequestWithRevision(request Et
 
 // applyRequestWithResponse applies request to all possible states, but leaves only state that would return proper response.
 func (states nonDeterministicState) applyRequestWithResponse(request EtcdRequest, response EtcdResponse) nonDeterministicState {
+	return states.applyRequestWithResponseContext(context.Background(), request, response)
+}
+
+func (states nonDeterministicState) applyRequestWithResponseContext(ctx context.Context, request EtcdRequest, response EtcdResponse) nonDeterministicState {
 	newStates := make(nonDeterministicState, 0, len(states))
 	for _, s := range states {
+		if ctx.Err() != nil {
+			return nil
+		}
 		newState, modelResponse := s.Step(request)
 		if Match(modelResponse, MaybeEtcdResponse{EtcdResponse: response}) {
 			newStates = append(newStates, newState)

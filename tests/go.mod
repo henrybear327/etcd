@@ -5,6 +5,7 @@ go 1.26
 toolchain go1.26.2
 
 replace (
+	github.com/anishathalye/porcupine => ../../porcupine
 	go.etcd.io/etcd/api/v3 => ../api
 	go.etcd.io/etcd/cache/v3 => ../cache
 	go.etcd.io/etcd/client/pkg/v3 => ../client/pkg
