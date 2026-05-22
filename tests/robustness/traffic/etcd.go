@@ -17,7 +17,6 @@ package traffic
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -402,7 +401,7 @@ func (c etcdTrafficClient) pickMultiTxnOps(keyStore *keyStore) (ops []clientv3.O
 }
 
 func (t etcdTraffic) pickOperationType() model.OperationType {
-	roll := rand.Int() % 100
+	roll := random.Int() % 100
 	if roll < 10 {
 		return model.DeleteOperation
 	}

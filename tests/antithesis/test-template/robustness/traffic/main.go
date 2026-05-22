@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"math/rand/v2"
 	"os"
 	"slices"
 	"sync"
@@ -73,7 +72,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	choice := rand.IntN(len(traffics))
+	choice := robustnessrand.Intn(len(traffics))
 	tf := traffics[choice]
 	lg.Info("Traffic", zap.String("Type", trafficNames[choice]))
 	r, err := report.NewTestReport(lg, reportPath, etcdetcdDataPaths, &report.TrafficDetail{ExpectUniqueRevision: tf.ExpectUniqueRevision()})

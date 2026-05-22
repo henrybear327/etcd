@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -406,7 +405,7 @@ func (s *storage) pickRandomLocked() (key string, rev int64) {
 	if l == 0 {
 		return "", 0
 	}
-	n := rand.Intn(l)
+	n := random.Intn(l)
 	i := 0
 	for k, v := range s.keyRevision {
 		if i == n {

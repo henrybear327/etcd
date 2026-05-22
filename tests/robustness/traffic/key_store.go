@@ -16,7 +16,6 @@ package traffic
 
 import (
 	"fmt"
-	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/robustness/model"
+	"go.etcd.io/etcd/tests/v3/robustness/random"
 )
 
 // Stores the key pool to use for operations. This allows keys used in Put and Delete operations to be more unique by probabilistically swapping out used keys.
@@ -55,7 +55,7 @@ func (k *keyStore) GetKey() string {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	useKey := k.keys[rand.Intn(len(k.keys))]
+	useKey := k.keys[random.Intn(len(k.keys))]
 
 	return useKey
 }
@@ -64,7 +64,7 @@ func (k *keyStore) GetKeyForDelete() string {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	useKeyIndex := rand.Intn(len(k.keys))
+	useKeyIndex := random.Intn(len(k.keys))
 	useKey := k.keys[useKeyIndex]
 
 	k.replaceKey(useKeyIndex)
@@ -84,7 +84,7 @@ func (k *keyStore) GetKeysForMultiTxnOps(ops []model.OperationType) []string {
 
 	keys := make([]string, numOps)
 
-	permutedKeyIndexes := rand.Perm(len(k.keys))
+	permutedKeyIndexes := random.Perm(len(k.keys))
 	for i, op := range ops {
 		keys[i] = k.keys[permutedKeyIndexes[i]]
 
@@ -157,7 +157,7 @@ func (k *keyStore) getKeyNum(key string) int {
 }
 
 func (k *keyStore) replaceKey(index int) {
-	if rand.Intn(100) < 90 {
+	if random.Intn(100) < 90 {
 		k.keys[index] = fmt.Sprintf("%s%d", k.keyPrefix, k.counter)
 		k.counter++
 	}

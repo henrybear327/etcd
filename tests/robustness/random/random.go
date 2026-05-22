@@ -15,7 +15,6 @@
 package random
 
 import (
-	"math/rand"
 	"strings"
 )
 
@@ -23,13 +22,13 @@ func RandString(size int) string {
 	data := strings.Builder{}
 	data.Grow(size)
 	for i := 0; i < size; i++ {
-		data.WriteByte(byte(int('a') + rand.Intn(26)))
+		data.WriteByte(byte(int('a') + Intn(26)))
 	}
 	return data.String()
 }
 
 func RandRange(start, end int64) int64 {
-	return rand.Int63n(end-start) + start
+	return Int63n(end-start) + start
 }
 
 type ChoiceWeight[T any] struct {
@@ -42,7 +41,7 @@ func PickRandom[T any](choices []ChoiceWeight[T]) T {
 	for _, op := range choices {
 		sum += op.Weight
 	}
-	roll := rand.Int() % sum
+	roll := Int() % sum
 	for _, op := range choices {
 		if roll < op.Weight {
 			return op.Choice
