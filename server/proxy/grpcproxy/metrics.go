@@ -17,15 +17,14 @@ package grpcproxy
 import (
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"go.etcd.io/etcd/server/v3/etcdserver/api/etcdhttp"
+	"go.etcd.io/etcd/server/v3/internal/randutil"
 )
 
 var (
@@ -72,9 +71,8 @@ func init() {
 // HandleMetrics performs a GET request against etcd endpoint and returns '/metrics'.
 func HandleMetrics(mux *http.ServeMux, c *http.Client, eps []string) {
 	// random shuffle endpoints
-	r := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
 	if len(eps) > 1 {
-		eps = shuffleEndpoints(r, eps)
+		eps = shuffleEndpoints(eps)
 	}
 
 	pathMetrics := etcdhttp.PathMetrics
@@ -105,12 +103,11 @@ func HandleProxyMetrics(mux *http.ServeMux) {
 	mux.Handle(etcdhttp.PathProxyMetrics, promhttp.Handler())
 }
 
-func shuffleEndpoints(r *rand.Rand, eps []string) []string {
-	// copied from Go 1.9<= rand.Rand.Perm
+func shuffleEndpoints(eps []string) []string {
 	n := len(eps)
 	p := make([]int, n)
 	for i := 0; i < n; i++ {
-		j := r.Intn(i + 1)
+		j := randutil.Intn(i + 1)
 		p[i] = p[j]
 		p[j] = i
 	}

@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	"go.etcd.io/etcd/server/v3/auth"
 	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/apply"
+	"go.etcd.io/etcd/server/v3/internal/randutil"
 	"go.etcd.io/etcd/server/v3/storage/mvcc"
 )
 
@@ -104,7 +104,7 @@ func GetProgressReportInterval() time.Duration {
 	// add rand(1/10*progressReportInterval) as jitter so that etcdserver will not
 	// send progress notifications to watchers around the same time even when watchers
 	// are created around the same time (which is common when a client restarts itself).
-	jitter := time.Duration(rand.Int63n(int64(interval) / 10))
+	jitter := time.Duration(randutil.Int63n(int64(interval) / 10))
 
 	return interval + jitter
 }

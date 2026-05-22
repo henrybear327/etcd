@@ -19,6 +19,10 @@ import (
 	"time"
 )
 
+// RandFloat64 allows third-party test runners or environments (like Antithesis)
+// to inject deterministic or controlled random float generators at runtime.
+var RandFloat64 = rand.Float64
+
 // jitterUp adds random jitter to the duration.
 //
 // This adds or subtracts time from the duration within a given jitter fraction.
@@ -26,6 +30,6 @@ import (
 //
 // Reference: https://godoc.org/github.com/grpc-ecosystem/go-grpc-middleware/util/backoffutils
 func jitterUp(duration time.Duration, jitter float64) time.Duration {
-	multiplier := jitter * (rand.Float64()*2 - 1)
+	multiplier := jitter * (RandFloat64()*2 - 1)
 	return time.Duration(float64(duration) * (1 + multiplier))
 }

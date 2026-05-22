@@ -17,12 +17,13 @@ package tcpproxy
 import (
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+
+	"go.etcd.io/etcd/server/v3/internal/randutil"
 )
 
 type remote struct {
@@ -122,7 +123,7 @@ func (tp *TCPProxy) pick() *remote {
 		}
 	}
 	if weighted != nil {
-		if len(unweighted) > 0 && rand.Intn(100) == 1 {
+		if len(unweighted) > 0 && randutil.Intn(100) == 1 {
 			// In the presence of records containing weights greater
 			// than 0, records with weight 0 should have a very small
 			// chance of being selected.
@@ -133,7 +134,7 @@ func (tp *TCPProxy) pick() *remote {
 		// choose a uniform random number between 0 and the sum computed
 		// (inclusive), and select the RR whose running sum value is the
 		// first in the selected order
-		choose := rand.Intn(w)
+		choose := randutil.Intn(w)
 		for i := 0; i < len(weighted); i++ {
 			choose -= int(weighted[i].srv.Weight)
 			if choose <= 0 {
