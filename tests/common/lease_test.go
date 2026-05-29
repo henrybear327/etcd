@@ -173,31 +173,16 @@ func TestLeaseGrantKeepAliveOnce(t *testing.T) {
 				leaseResp, err := cc.Grant(ctx, 2)
 				require.NoError(t, err)
 
+				// Sleep for 1.2 seconds so that the remaining TTL would drop below 1.0 second.
+				time.Sleep(1200 * time.Millisecond)
+
 				_, err = cc.KeepAliveOnce(ctx, leaseResp.ID)
 				require.NoError(t, err)
 
-				// FIXME: When leader changes, old leader steps
-				// back to follower and ignores the lease revoking.
-				// The new leader will restart TTL counting. If so,
-				// we should call time.Sleep again and wait for revoking.
-				// It can't avoid flakey but reduce flakey possibility.
-				for i := 0; i < 3; i++ {
-					currentLeader := clus.WaitLeader(t)
-					t.Logf("[%d] current leader index %d", i, currentLeader)
-
-					time.Sleep(2 * time.Second)
-
-					newLeader := clus.WaitLeader(t)
-					if newLeader == currentLeader {
-						break
-					}
-					t.Logf("[%d] leader changed, new leader index %d", i, newLeader)
-				}
-
 				ttlResp, err := cc.TimeToLive(ctx, leaseResp.ID, config.LeaseOption{})
 				require.NoError(t, err)
-				// We still have a lease!
-				require.Greater(t, int64(2), ttlResp.TTL)
+				// The lease should be renewed back to 2 seconds, so TTL must be > 0.
+				require.Greater(t, ttlResp.TTL, int64(0))
 			})
 		})
 	}
