@@ -139,32 +139,20 @@ func TestLeaseGrantTimeToLiveExpired(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, int64(1), getResp.Count)
 
-				// FIXME: When leader changes, old leader steps
-				// back to follower and ignores the lease revoking.
-				// The new leader will restart TTL counting. If so,
-				// we should call time.Sleep again and wait for revoking.
-				// It can't avoid flakey but reduce flakey possibility.
-				for i := 0; i < 3; i++ {
-					currentLeader := clus.WaitLeader(t)
-					t.Logf("[%d] current leader index %d", i, currentLeader)
-
-					time.Sleep(3 * time.Second)
-
-					newLeader := clus.WaitLeader(t)
-					if newLeader == currentLeader {
-						break
+				require.Eventually(t, func() bool {
+					ttlResp, err := cc.TimeToLive(ctx, leaseResp.ID, config.LeaseOption{})
+					if err != nil {
+						return false
 					}
-					t.Logf("[%d] leader changed, new leader index %d", i, newLeader)
-				}
-
-				ttlResp, err := cc.TimeToLive(ctx, leaseResp.ID, config.LeaseOption{})
-				require.NoError(t, err)
-				require.Equal(t, int64(-1), ttlResp.TTL)
-
-				getResp, err = cc.Get(ctx, "foo", config.GetOptions{})
-				require.NoError(t, err)
-				// Value should expire with the lease
-				require.Equal(t, int64(0), getResp.Count)
+					if ttlResp.TTL != -1 {
+						return false
+					}
+					getResp, err = cc.Get(ctx, "foo", config.GetOptions{})
+					if err != nil {
+						return false
+					}
+					return getResp.Count == 0
+				}, 10*time.Second, 100*time.Millisecond)
 			})
 		})
 	}
