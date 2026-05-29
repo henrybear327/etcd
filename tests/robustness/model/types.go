@@ -18,9 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"reflect"
 	"slices"
 
+	"github.com/google/go-cmp/cmp"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 )
 
@@ -190,7 +190,7 @@ func Match(r1, r2 MaybeEtcdResponse) bool {
 	r1.EtcdResponse.MemberID = 0
 	r2.EtcdResponse.MemberID = 0
 
-	return (r1.Persisted && r1.PersistedRevision == 0) || (r2.Persisted && r2.PersistedRevision == 0) || ((r1.Persisted || r2.Persisted) && (r1.Error != "" || r2.Error != "" || r1Revision == r2Revision)) || reflect.DeepEqual(r1, r2)
+	return (r1.Persisted && r1.PersistedRevision == 0) || (r2.Persisted && r2.PersistedRevision == 0) || ((r1.Persisted || r2.Persisted) && (r1.Error != "" || r2.Error != "" || r1Revision == r2Revision)) || cmp.Equal(r1, r2)
 }
 
 type TxnResponse struct {
