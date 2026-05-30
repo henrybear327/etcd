@@ -36,6 +36,12 @@ import (
 // See https://github.com/anishathalye/porcupine/pull/45 and https://github.com/etcd-io/etcd/pull/21715.
 var LinearizationDeadlineTripped atomic.Int32
 
+var (
+	PrunedSteps     atomic.Uint64
+	WastedSteps     atomic.Uint64
+	SuccessfulSteps atomic.Uint64
+)
+
 // NonDeterministicModel extends DeterministicModel to allow for clients with imperfect knowledge of the request's destiny.
 // An unknown/error response doesn't inform whether the request was persisted or not, so the model
 // considers both cases. This is represented as multiple, equally possible deterministic states.
@@ -215,6 +221,9 @@ func (states nonDeterministicState) applyPersistedRequestWithRevision(request Et
 		newState, modelResponse := s.Step(request)
 		if modelResponse.Revision == responseRevision {
 			newStates = append(newStates, newState)
+			SuccessfulSteps.Add(1)
+		} else {
+			WastedSteps.Add(1)
 		}
 	}
 	return newStates
@@ -230,6 +239,9 @@ func (states nonDeterministicState) applyRequestWithResponse(request EtcdRequest
 		newState, modelResponse := s.Step(request)
 		if Match(modelResponse, MaybeEtcdResponse{EtcdResponse: response}) {
 			newStates = append(newStates, newState)
+			SuccessfulSteps.Add(1)
+		} else {
+			WastedSteps.Add(1)
 		}
 	}
 	return newStates
