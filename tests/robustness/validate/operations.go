@@ -49,6 +49,12 @@ func validateLinearizableOperationsAndVisualize(lg *zap.Logger, keys []string, o
 		timer.Stop()
 	}
 
+	lg.Info("Linearization step statistics",
+		zap.Uint64("pruned_steps", model.PrunedSteps.Load()),
+		zap.Uint64("wasted_steps", model.WastedSteps.Load()),
+		zap.Uint64("successful_steps", model.SuccessfulSteps.Load()),
+	)
+
 	result := LinearizationResult{
 		Info:  info,
 		Model: m,

@@ -576,3 +576,33 @@ func TestModelResponseMatch(t *testing.T) {
 		assert.Equalf(t, tc.expectMatch, Match(tc.resp1, tc.resp2), "%d %+v %+v", i, tc.resp1, tc.resp2)
 	}
 }
+
+func TestStepTracking(t *testing.T) {
+	// Reset counters
+	PrunedSteps.Store(0)
+	WastedSteps.Store(0)
+	SuccessfulSteps.Store(0)
+
+	states := nonDeterministicState{freshEtcdState([]string{"key"})}
+
+	// Applying a Txn that matches should increment SuccessfulSteps
+	req1 := putRequest("key", "val")
+	res1 := putResponse(2)
+	_, newStates := states.apply(req1, MaybeEtcdResponse{EtcdResponse: res1.EtcdResponse})
+	assert.Equal(t, uint64(1), SuccessfulSteps.Load())
+	assert.Equal(t, uint64(0), PrunedSteps.Load())
+	assert.Equal(t, uint64(0), WastedSteps.Load())
+
+	// Reset counters
+	PrunedSteps.Store(0)
+	WastedSteps.Store(0)
+	SuccessfulSteps.Store(0)
+
+	// Applying a request with completely mismatched revision (e.g. 99) should trigger PrunedSteps and avoid Step call
+	req2 := getRequest("key")
+	res2 := getResponse("key", "val", 2, 99) // Revision 99
+	_, _ = newStates.apply(req2, MaybeEtcdResponse{EtcdResponse: res2.EtcdResponse})
+	assert.Equal(t, uint64(1), PrunedSteps.Load())
+	assert.Equal(t, uint64(0), SuccessfulSteps.Load())
+	assert.Equal(t, uint64(0), WastedSteps.Load())
+}
