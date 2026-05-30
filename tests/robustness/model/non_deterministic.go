@@ -193,6 +193,9 @@ func (states nonDeterministicState) applyFailedRequest(request EtcdRequest) nonD
 		newState, _ := s.Step(request)
 		if !newState.Equal(s) {
 			newStates = append(newStates, newState)
+			SuccessfulSteps.Add(1)
+		} else {
+			WastedSteps.Add(1)
 		}
 	}
 	return newStates
@@ -207,6 +210,7 @@ func (states nonDeterministicState) applyPersistedRequest(request EtcdRequest) n
 		}
 		newState, _ := s.Step(request)
 		newStates = append(newStates, newState)
+		SuccessfulSteps.Add(1)
 	}
 	return newStates
 }
@@ -217,6 +221,10 @@ func (states nonDeterministicState) applyPersistedRequestWithRevision(request Et
 	for _, s := range states {
 		if LinearizationDeadlineTripped.Load() != 0 {
 			return nil
+		}
+		if responseRevision > 0 && (s.Revision > responseRevision || s.Revision+1 < responseRevision) {
+			PrunedSteps.Add(1)
+			continue
 		}
 		newState, modelResponse := s.Step(request)
 		if modelResponse.Revision == responseRevision {
@@ -235,6 +243,16 @@ func (states nonDeterministicState) applyRequestWithResponse(request EtcdRequest
 	for _, s := range states {
 		if LinearizationDeadlineTripped.Load() != 0 {
 			return nil
+		}
+		if request.Type == Txn && response.Txn != nil {
+			if s.EvalTxnFailure(request) != response.Txn.Failure {
+				PrunedSteps.Add(1)
+				continue
+			}
+		}
+		if response.Revision > 0 && (s.Revision > response.Revision || s.Revision+1 < response.Revision) {
+			PrunedSteps.Add(1)
+			continue
 		}
 		newState, modelResponse := s.Step(request)
 		if Match(modelResponse, MaybeEtcdResponse{EtcdResponse: response}) {

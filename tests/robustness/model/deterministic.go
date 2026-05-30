@@ -170,6 +170,23 @@ func (s EtcdState) stepRange(request EtcdRequest) (EtcdState, MaybeEtcdResponse)
 	return s, MaybeEtcdResponse{Persisted: true, PersistedRevision: s.Revision}
 }
 
+func (s EtcdState) EvalTxnFailure(request EtcdRequest) bool {
+	for _, cond := range request.Txn.Conditions {
+		val, ok := s.GetValue(cond.Key)
+		if !ok {
+			val = &ValueRevision{}
+		}
+		if cond.ExpectedVersion > 0 {
+			if val.Version != cond.ExpectedVersion {
+				return true
+			}
+		} else if val.ModRevision != cond.ExpectedRevision {
+			return true
+		}
+	}
+	return false
+}
+
 func (s EtcdState) stepTxn(request EtcdRequest) (EtcdState, MaybeEtcdResponse) {
 	// TODO: Avoid copying when TXN only has read operations
 	newState := s.DeepCopy()
