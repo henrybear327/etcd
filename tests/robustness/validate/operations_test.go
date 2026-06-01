@@ -353,8 +353,11 @@ func TestValidateLinearizableOperationsTimeoutIsRespected(t *testing.T) {
 	if result.Status != DeadlineExceeded {
 		t.Fatalf("validateLinearizableOperationsAndVisualize(...) status = %q, want %q", result.Status, DeadlineExceeded)
 	}
-	if result.Message != "deadline exceeded" {
-		t.Fatalf("validateLinearizableOperationsAndVisualize(...) message = %q, want %q", result.Message, "deadline exceeded")
+	if result.Message != "" {
+		t.Fatalf("validateLinearizableOperationsAndVisualize(...) message = %q, want %q", result.Message, "")
+	}
+	if err := result.Error(); err == nil || err.Error() != "DeadlineExceeded" {
+		t.Fatalf("validateLinearizableOperationsAndVisualize(...) error = %v, want %q", err, "DeadlineExceeded")
 	}
 	if elapsed > timeout+250*time.Millisecond {
 		t.Fatalf("validateLinearizableOperationsAndVisualize(...) does not respect timeout: %v, timeout was %v", elapsed, timeout)
