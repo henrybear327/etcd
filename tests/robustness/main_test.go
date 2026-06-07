@@ -107,7 +107,10 @@ func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s scenari
 		t.Error(err)
 	}
 
-	validateConfig := validate.Config{ExpectRevisionUnique: s.Traffic.ExpectUniqueRevision()}
+	validateConfig := validate.Config{
+		ExpectRevisionUnique: s.Traffic.ExpectUniqueRevision(),
+		MaxHeapBytes:         getMaxHeapBytes(),
+	}
 	persistedRequests, err := report.PersistedRequestsCluster(lg, c)
 	if err != nil {
 		t.Error(err)
@@ -222,4 +225,14 @@ func processEndpoints(clus *e2e.EtcdProcessCluster) []string {
 		endpoints = append(endpoints, proc.EndpointsGRPC()[0])
 	}
 	return endpoints
+}
+
+// getMaxHeapBytes returns the maximum heap size limit in bytes for the linearization check.
+// The memory limit is enabled by default to prevent CI from being OOM-killed.
+// It can be disabled by setting the environment variable DISABLE_HEAP_LIMIT to true.
+func getMaxHeapBytes() uint64 {
+	if _, ok := os.LookupEnv("DISABLE_HEAP_LIMIT"); ok {
+		return 0
+	}
+	return validate.DefaultMaxHeapBytes
 }

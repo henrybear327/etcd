@@ -43,9 +43,11 @@ func ValidateAndReturnVisualize(lg *zap.Logger, cfg Config, reports []report.Cli
 	}
 	keys := model.ModelKeys(linearizableOperations)
 	result.Linearization = validateLinearizableOperationsAndVisualize(lg, linearizationParams{
-		keys:       keys,
-		operations: linearizableOperations,
-		timeout:    timeout,
+		keys:            keys,
+		operations:      linearizableOperations,
+		timeout:         timeout,
+		limitBytes:      cfg.MaxHeapBytes,
+		monitorInterval: cfg.MemMonitorInterval,
 	})
 	result.Linearization.AddToVisualization(operationsForVisualization)
 	// Skip other validations if model is not linearizable, as they are expected to fail too and obfuscate the logs.
@@ -63,8 +65,21 @@ func ValidateAndReturnVisualize(lg *zap.Logger, cfg Config, reports []report.Cli
 	return result
 }
 
+// DefaultMaxHeapBytes is the default memory limit of 8 GiB used in CI to prevent OOM-kills.
+const DefaultMaxHeapBytes = 8 * 1024 * 1024 * 1024
+
+// DefaultMemMonitorInterval is the default memory statistics polling interval during validation.
+const DefaultMemMonitorInterval = 100 * time.Millisecond
+
 type Config struct {
 	ExpectRevisionUnique bool
+	// MaxHeapBytes specifies the heap memory limit (in bytes) during the linearization validation phase.
+	// If the heap usage exceeds this limit, validation will be stopped prematurely.
+	// A value of 0 means the memory limit is disabled.
+	MaxHeapBytes uint64
+	// MemMonitorInterval specifies the interval for polling memory statistics during validation.
+	// If not specified or 0, DefaultMemMonitorInterval is used.
+	MemMonitorInterval time.Duration
 }
 
 func prepareAndCategorizeOperations(reports []report.ClientReport) (linearizable, serializable, forVisualization []porcupine.Operation) {

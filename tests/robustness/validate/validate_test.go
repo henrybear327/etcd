@@ -30,6 +30,7 @@ import (
 	"go.etcd.io/etcd/tests/v3/robustness/report"
 )
 
+// We don't aply heap limit to TestDataReports because this is used locally only for reproduction, and that's the exact use case where we should try to see if the linearization can pass
 func TestDataReports(t *testing.T) {
 	testdataPath := testutils.MustAbsPath("../testdata/")
 	files, err := os.ReadDir(testdataPath)
@@ -48,11 +49,11 @@ func TestDataReports(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+
 			result := ValidateAndReturnVisualize(zaptest.NewLogger(t), Config{}, reports, persistedRequests, 5*time.Minute)
 			err = result.Error()
 			if err != nil {
 				t.Error(err)
-			}
 
 			err = result.Linearization.Visualize(lg, filepath.Join(path, "history.html"))
 			if err != nil {

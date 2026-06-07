@@ -15,8 +15,11 @@
 package validate
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/anishathalye/porcupine"
@@ -32,23 +35,91 @@ var (
 )
 
 type linearizationParams struct {
-	keys       []string
-	operations []porcupine.Operation
-	timeout    time.Duration
+	keys            []string
+	operations      []porcupine.Operation
+	timeout         time.Duration
+	limitBytes      uint64
+	monitorInterval time.Duration
 }
 
 func validateLinearizableOperationsAndVisualize(lg *zap.Logger, params linearizationParams) LinearizationResult {
-	lg.Info("Validating linearizable operations", zap.Duration("timeout", params.timeout))
+	monitorInterval := params.monitorInterval
+	if params.limitBytes > 0 && monitorInterval == 0 {
+		monitorInterval = DefaultMemMonitorInterval
+	}
+	lg.Info("Validating linearizable operations", zap.Duration("timeout", params.timeout), zap.Uint64("memory-limit-bytes", params.limitBytes), zap.Duration("memory-monitor-interval", monitorInterval))
 	start := time.Now()
 
 	m := model.NonDeterministicModel(params.keys)
-	check, info := porcupine.CheckOperationsVerbose(m, params.operations, params.timeout)
 
+	// We run a background goroutine to poll memory statistics instead of
+	// calling runtime.ReadMemStats on every StepContext execution. ReadMemStats is relatively
+	// expensive and would slow down validation drastically if called on every DFS node.
+	var memoryLimitExceeded atomic.Bool
+	stopMonitor := make(chan struct{})
+	defer close(stopMonitor)
+
+	if params.limitBytes > 0 {
+		var initialMem runtime.MemStats
+		runtime.ReadMemStats(&initialMem)
+		if initialMem.Alloc > params.limitBytes {
+			memoryLimitExceeded.Store(true)
+			lg.Warn("Heap memory limit exceeded at start; flagging search termination", zap.Uint64("limit", params.limitBytes), zap.Uint64("allocated", initialMem.Alloc))
+		} else {
+			go func() {
+				ticker := time.NewTicker(monitorInterval)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						var mem runtime.MemStats
+						runtime.ReadMemStats(&mem)
+						if mem.Alloc > params.limitBytes {
+							// Set the atomic flag. StepContext checks this flag in a thread-safe,
+							// lock-free manner on every state transition.
+							memoryLimitExceeded.Store(true)
+							lg.Warn("Heap memory limit exceeded; flagging search termination", zap.Uint64("limit", params.limitBytes), zap.Uint64("allocated", mem.Alloc))
+							return
+						}
+					case <-stopMonitor:
+						return
+					}
+				}
+			}()
+		}
+	}
+
+	// We wrap the model's StepContext function to pass a context that implements memory limit checking.
+	// If the memory limit is breached, Err() on this context will return context.Canceled.
+	// Because the non-deterministic model's apply function and state transitions (which implement
+	// StepContext) check ctx.Err() != nil, they will abort immediately, returning false, nil.
+	originalStepContext := m.StepContext
+	m.StepContext = func(ctx context.Context, state interface{}, input interface{}, output interface{}) (bool, interface{}) {
+		wrappedCtx := memoryLimitContext{
+			Context:       ctx,
+			limitExceeded: &memoryLimitExceeded,
+		}
+		return originalStepContext(wrappedCtx, state, input, output)
+	}
+
+	check, info := porcupine.CheckOperationsVerbose(m, params.operations, params.timeout)
 	duration := time.Since(start)
 
 	result := LinearizationResult{
 		Info:  info,
 		Model: m,
+	}
+
+	// If the memory limit was tripped, we override the check outcome to report
+	// MemoryUsageExceeded. Since the DFS prunes all paths, Porcupine would otherwise
+	// report porcupine.Illegal (which is a false positive correctness failure).
+	if params.limitBytes > 0 && memoryLimitExceeded.Load() {
+		var mem runtime.MemStats
+		runtime.ReadMemStats(&mem)
+		result.Status = MemoryUsageExceeded
+		result.Message = fmt.Sprintf("memory limit exceeded: current heap size %d bytes exceeds limit %d bytes", mem.Alloc, params.limitBytes)
+		lg.Error("Linearization aborted due to memory limit", zap.Duration("duration", duration), zap.Uint64("limit", params.limitBytes), zap.Uint64("allocated", mem.Alloc))
+		return result
 	}
 
 	switch check {
@@ -114,4 +185,25 @@ func validateSerializableRead(lg *zap.Logger, replay *model.EtcdReplay, request 
 		return errRespNotMatched
 	}
 	return nil
+}
+
+type memoryLimitContext struct {
+	context.Context
+	limitExceeded *atomic.Bool
+}
+
+func (c memoryLimitContext) Err() error {
+	if c.limitExceeded.Load() {
+		return context.Canceled
+	}
+	return c.Context.Err()
+}
+
+func (c memoryLimitContext) Done() <-chan struct{} {
+	if c.limitExceeded.Load() {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	return c.Context.Done()
 }

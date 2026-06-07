@@ -59,7 +59,10 @@ func validateReports(lg *zap.Logger, serversDataPath map[string]string, reports 
 	persistedRequests, err := report.PersistedRequests(lg, slices.Collect(maps.Values(serversDataPath)))
 	assertResult(validate.ResultFromError(err), "Loaded persisted requests")
 
-	validateConfig := validate.Config{ExpectRevisionUnique: tf.ExpectUniqueRevision}
+	validateConfig := validate.Config{
+		ExpectRevisionUnique: tf.ExpectUniqueRevision,
+		MaxHeapBytes:         getMaxHeapBytes(),
+	}
 	result := validate.ValidateAndReturnVisualize(lg, validateConfig, reports, persistedRequests, 5*time.Minute)
 	assertResult(result.Assumptions, "Validation assumptions fulfilled")
 	assertResult(result.Linearization.Result, "Linearization validation passes")
@@ -76,4 +79,14 @@ func assertResult(result validate.Result, name string) {
 	default:
 		assert.Unreachable(name, map[string]any{"error": result.Error().Error()})
 	}
+}
+
+// getMaxHeapBytes returns the maximum heap size limit in bytes for the linearization check.
+// The memory limit is enabled by default to prevent CI from being OOM-killed.
+// It can be disabled by setting the environment variable DISABLE_HEAP_LIMIT to true.
+func getMaxHeapBytes() uint64 {
+	if _, ok := os.LookupEnv("DISABLE_HEAP_LIMIT"); ok {
+		return 0
+	}
+	return validate.DefaultMaxHeapBytes
 }

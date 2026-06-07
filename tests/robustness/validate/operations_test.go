@@ -18,6 +18,7 @@ package validate
 import (
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"testing"
 	"time"
 
@@ -537,5 +538,29 @@ func validateShuffles(b *testing.B, lg *zap.Logger, shuffles [][]porcupine.Opera
 		if err := result.Error(); err != nil {
 			b.Fatalf("Not linearizable: %v", err)
 		}
+	}
+}
+
+func TestValidateLinearizableOperationsMemoryLimitIsRespected(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	// Create a history that is sequential and would normally succeed, but we set a tiny memory limit.
+	history := sequentialSuccessPuts(100, 2)
+	keys := model.ModelKeys(history)
+
+	// Set a memory limit of 1 byte, which is guaranteed to be exceeded immediately.
+	result := validateLinearizableOperationsAndVisualize(zaptest.NewLogger(t), linearizationParams{
+		keys:            keys,
+		operations:      history,
+		timeout:         5 * time.Second,
+		limitBytes:      1,
+		monitorInterval: 10 * time.Millisecond,
+	})
+
+	if result.Status != MemoryUsageExceeded {
+		t.Fatalf("validateLinearizableOperationsAndVisualize(...) status = %q, want %q", result.Status, MemoryUsageExceeded)
+	}
+	if !strings.Contains(result.Message, "memory limit exceeded") {
+		t.Fatalf("validateLinearizableOperationsAndVisualize(...) message = %q, want message containing %q", result.Message, "memory limit exceeded")
 	}
 }

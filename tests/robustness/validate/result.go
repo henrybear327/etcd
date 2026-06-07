@@ -41,6 +41,8 @@ var (
 	Success ResultStatus = "Success"
 	Failure ResultStatus = "Failure"
 	Timeout ResultStatus = "Timeout"
+	// MemoryUsageExceeded is a status indicating the heap memory limit was exceeded during validation. It does not support visualization.
+	MemoryUsageExceeded ResultStatus = "MemoryUsageExceeded"
 )
 
 func (r RobustnessResult) Error() error {
