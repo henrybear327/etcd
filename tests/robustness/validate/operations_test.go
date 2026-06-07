@@ -349,7 +349,11 @@ func TestValidateLinearizableOperationsTimeoutIsRespected(t *testing.T) {
 	keys := model.ModelKeys(history)
 
 	start := time.Now()
-	result := validateLinearizableOperationsAndVisualize(zap.NewNop(), keys, history, timeout)
+	result := validateLinearizableOperationsAndVisualize(zap.NewNop(), linearizationParams{
+		keys:       keys,
+		operations: history,
+		timeout:    timeout,
+	})
 	elapsed := time.Since(start)
 
 	if result.Status != Timeout {
@@ -389,7 +393,11 @@ func BenchmarkValidateLinearizableOperations(b *testing.B) {
 		keys := model.ModelKeys(history)
 		b.ResetTimer()
 		for i := 0; i < len(shuffles); i++ {
-			validateLinearizableOperationsAndVisualize(lg, keys, shuffles[i], time.Second)
+			validateLinearizableOperationsAndVisualize(lg, linearizationParams{
+				keys:       keys,
+				operations: shuffles[i],
+				timeout:    time.Second,
+			})
 		}
 	})
 }
@@ -521,7 +529,11 @@ func shuffleHistory(history []porcupine.Operation, shuffleCount int) [][]porcupi
 func validateShuffles(b *testing.B, lg *zap.Logger, shuffles [][]porcupine.Operation, duration time.Duration) {
 	keys := model.ModelKeys(shuffles[0])
 	for i := 0; i < len(shuffles); i++ {
-		result := validateLinearizableOperationsAndVisualize(lg, keys, shuffles[i], duration)
+		result := validateLinearizableOperationsAndVisualize(lg, linearizationParams{
+			keys:       keys,
+			operations: shuffles[i],
+			timeout:    duration,
+		})
 		if err := result.Error(); err != nil {
 			b.Fatalf("Not linearizable: %v", err)
 		}

@@ -42,7 +42,11 @@ func ValidateAndReturnVisualize(lg *zap.Logger, cfg Config, reports []report.Cli
 		linearizableOperations = patchLinearizableOperations(linearizableOperations, reports, persistedRequests)
 	}
 	keys := model.ModelKeys(linearizableOperations)
-	result.Linearization = validateLinearizableOperationsAndVisualize(lg, keys, linearizableOperations, timeout)
+	result.Linearization = validateLinearizableOperationsAndVisualize(lg, linearizationParams{
+		keys:       keys,
+		operations: linearizableOperations,
+		timeout:    timeout,
+	})
 	result.Linearization.AddToVisualization(operationsForVisualization)
 	// Skip other validations if model is not linearizable, as they are expected to fail too and obfuscate the logs.
 	if result.Linearization.Error() != nil {

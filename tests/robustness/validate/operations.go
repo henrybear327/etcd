@@ -31,12 +31,19 @@ var (
 	errFutureRevRespRequested = errors.New("request about a future rev with response")
 )
 
-func validateLinearizableOperationsAndVisualize(lg *zap.Logger, keys []string, operations []porcupine.Operation, timeout time.Duration) LinearizationResult {
-	lg.Info("Validating linearizable operations", zap.Duration("timeout", timeout))
+type linearizationParams struct {
+	keys       []string
+	operations []porcupine.Operation
+	timeout    time.Duration
+}
+
+func validateLinearizableOperationsAndVisualize(lg *zap.Logger, params linearizationParams) LinearizationResult {
+	lg.Info("Validating linearizable operations", zap.Duration("timeout", params.timeout))
 	start := time.Now()
 
-	m := model.NonDeterministicModel(keys)
-	check, info := porcupine.CheckOperationsVerbose(m, operations, timeout)
+	m := model.NonDeterministicModel(params.keys)
+	check, info := porcupine.CheckOperationsVerbose(m, params.operations, params.timeout)
+
 	duration := time.Since(start)
 
 	result := LinearizationResult{
